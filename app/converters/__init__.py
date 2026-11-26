@@ -39,5 +39,8 @@ def convert(src: str, dst: str, target: str, ocr: bool = True, lang: str = "spa+
     if source != src and info.get("scanned_pages"):
         # El OCR lo hizo el pre-proceso (OCRmyPDF): las páginas escaneadas cuentan.
         info["ocr_pages"] = max(info.get("ocr_pages", 0), info["scanned_pages"])
-    info["quality"] = verify(src, dst, target)
+    if "quality" not in info:
+        # El conversor de Word ya verifica su salida y devuelve su "quality":
+        # reutilizarla evita una segunda verificación del mismo archivo.
+        info["quality"] = verify(src, dst, target)
     return info
