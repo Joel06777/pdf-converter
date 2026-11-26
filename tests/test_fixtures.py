@@ -266,6 +266,37 @@ def test_escaneado_ocr_recupera_cifras(tmp_path):
 
 
 @needs_tesseract
+def test_escaneado_ocr_simbolo_numero(tmp_path):
+    """El OCR lee "Nº" como "N?" (o "N*", "N°"): la conversión lo corrige a
+    "Nº" y no deja restos "N?"/"N*" en la salida.
+
+    Medido: sin la corrección la precisión de texto del escaneado era 97,9 %
+    (el único token que faltaba era "nº"); con ella es 100 % (48/48).
+    """
+    out = tmp_path / "s.xlsx"
+    convert(str(FIX / "escaneado.pdf"), str(out), "excel")
+    got = xlsx_tokens(str(out))
+    assert got.get(("t", "nº"), 0) == 1
+    assert got.get(("t", "n?"), 0) == 0
+    assert got.get(("t", "n*"), 0) == 0
+    texts = _all_text_xlsx(out)
+    assert any("Nº" in t for t in texts)
+
+
+def test_fix_ocr_numero_unidad():
+    """_fix_ocr_numero solo toca texto OCR: no toca texto legítimo."""
+    from app.converters.extract import _fix_ocr_numero
+
+    assert _fix_ocr_numero("FACTURA N? 001-002-0001234") == "FACTURA Nº 001-002-0001234"
+    assert _fix_ocr_numero("N* 5") == "Nº 5"
+    assert _fix_ocr_numero("N° 5") == "Nº 5"
+    assert _fix_ocr_numero("FACTURA No 001-002-0001234") == "FACTURA Nº 001-002-0001234"
+    assert _fix_ocr_numero("No se aceptan devoluciones") == "No se aceptan devoluciones"
+    assert _fix_ocr_numero("30° de inclinación") == "30° de inclinación"
+    assert _fix_ocr_numero("N?") == "Nº"
+
+
+@needs_tesseract
 def test_foto_inclinada_ocr_con_enderezado(tmp_path):
     doc = pymupdf.open(FIX / "foto_inclinada.pdf")
     model = extract_page(doc, doc[0])
