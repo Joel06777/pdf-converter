@@ -222,6 +222,15 @@ def extract_page(
                         continue  # restos de líneas leídos como "|", "_" o "¦"
                     model.spans.append(Span(text=text, x0=x0, y0=y0, x1=x1, y1=y1, rotation=rotation, **style))
 
+    # Corrección del símbolo Nº mal leído por el OCR (solo cuando hubo OCR:
+    # el texto nativo nunca se toca). Va antes del filtro de confianzas para
+    # que el mapa de confianza use ya el texto corregido.
+    if model.ocr_used:
+        for sp in model.spans:
+            sp.text = _fix_ocr_numero(sp.text)
+        for w in model.ocr_confidences:
+            w["text"] = _fix_ocr_numero(w["text"])
+
     # El mapa de confianza viene de una segunda pasada de Tesseract: solo se
     # conservan las palabras que realmente quedaron en el texto extraído, para
     # no advertir sobre fragmentos que el conversor ya descartó.
@@ -451,6 +460,24 @@ def group_rows(spans: list[Span]) -> list[Row]:
                 segs.append(Segment(sp.text, sp.x0, sp.y0, sp.x1, sp.y1, sp.font, sp.size, sp.bold, sp.italic, sp.color, sp.rotation))
         rows.append(Row(segs, min(s.y0 for s in segs), max(s.y1 for s in segs)))
     return rows
+
+
+def _fix_ocr_numero(text: str) -> str:
+    """Corrige el símbolo Nº mal leído por el OCR (solo texto OCR, nunca nativo).
+
+    Tesseract con spa+eng lee el indicador ordinal masculino º (U+00BA) como
+    "?" o "*" en muchos casos ("FACTURA N? 001-002-0001234" en vez de
+    "FACTURA Nº ..."), y a veces como "N°" (signo de grado) o "No" seguido
+    del número de factura. Esas formas no son palabras legítimas en español
+    como token aislado ("N?", "N*"), así que la corrección es segura:
+    - "N?" / "N*" (token completo) -> "Nº"
+    - "N°" (token completo) -> "Nº" (los documentos usan Nº, no N°)
+    - "No" + número de factura ecuatoriano (NNN-NNN-...) -> "Nº"
+    """
+    text = re.sub(r"(?<!\w)N[?*](?!\w)", "Nº", text)
+    text = re.sub(r"(?<!\w)N°(?!\w)", "Nº", text)
+    text = re.sub(r"\bNo(?=\s+\d{3}-\d{3}-\d)", "Nº", text)
+    return text
 
 
 def _lone_currency(text: str) -> bool:
