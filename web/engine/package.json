@@ -1,0 +1,33 @@
+{
+  "name": "pdf-converter-engine",
+  "version": "0.1.0",
+  "description": "Motor de conversión PDF a Excel/Word/PowerPoint en el navegador (WebAssembly + JavaScript, en Web Worker). Sin servidor: la conversión ocurre en el dispositivo del usuario.",
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./worker": "./src/worker.js"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "sizes": "node scripts/measure-sizes.mjs",
+    "build": "node scripts/build-browser.mjs"
+  },
+  "dependencies": {
+    "docx": "9.16.0",
+    "exceljs": "4.4.0",
+    "fflate": "0.8.3",
+    "mupdf": "1.28.6",
+    "pptxgenjs": "4.0.1",
+    "tesseract.js": "7.0.0"
+  },
+  "devDependencies": {
+    "vite": "^8.4.0",
+    "vitest": "5.1.2"
+  }
+}
