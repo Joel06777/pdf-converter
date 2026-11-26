@@ -20,7 +20,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.properties import PageSetupProperties
 
-from .extract import ConversionCancelled, PageModel, Row, Segment, extract_page, group_rows
+from .extract import ConversionCancelled, PageModel, Row, Segment, _lone_currency, extract_page, group_rows
 from .numbers import parse_number
 from .ocr import LOW_CONFIDENCE, ocr_warning
 
@@ -447,7 +447,101 @@ def build_layout(model: PageModel) -> Layout:
             if merge_to is None and "\n" in seg.text and horizontal == "left":
                 merge_to = _col_index(cols, seg.x1 - 0.5)
             placements.append(Placement(i, j, seg, horizontal, merge_to, parsed))
+    placements = _merge_currency_with_number(placements)
     return Layout(rows, cols, bounds, fills, borders, placements)
+
+
+def _merge_currency_with_number(placements: list[Placement]) -> list[Placement]:
+    """Fusiona un símbolo de moneda suelto ("$") con la cifra que va pegada a él
+    cuando ambos caen en la misma celda.
+
+    El OCR (y algunos PDF nativos) guardan "$ 0.50" como dos fragmentos; sin
+    fusionar, el segundo sobrescribe al primero al escribir la celda y el "$"
+    se pierde (medido: los 7 "$" de la factura escaneada no llegaban al Excel,
+    lo que bajaba la precisión de texto del 97,9 % al 83,3 %). La fusión no
+    cambia ningún valor: la cifra resultante es la misma, con formato "$".
+    Solo se fusiona cuando comparten celda: si están en columnas distintas,
+    cada uno se queda donde está.
+    """
+    by_cell: dict[tuple[int, int], list[int]] = {}
+    for k, pl in enumerate(placements):
+        by_cell.setdefault((pl.row, pl.col), []).append(k)
+    drop: set[int] = set()
+    for idxs in by_cell.values():
+        if len(idxs) != 2:
+            continue
+        a, b = placements[idxs[0]], placements[idxs[1]]
+        cur, num = (a, b) if _lone_currency(a.seg.text) and b.parsed is not None else \
+            ((b, a) if _lone_currency(b.seg.text) and a.parsed is not None else (None, None))
+        if cur is None or cur.seg.x0 > num.seg.x0:
+            continue  # la moneda va delante de la cifra; si no, no se toca
+        combined = f"{cur.seg.text.strip()} {num.seg.text.strip()}"
+        parsed = parse_number(combined)
+        if parsed is None:
+            continue
+        num.seg = Segment(combined, min(cur.seg.x0, num.seg.x0), min(cur.seg.y0, num.seg.y0),
+                          max(cur.seg.x1, num.seg.x1), max(cur.seg.y1, num.seg.y1),
+                          num.seg.font, num.seg.size, num.seg.bold, num.seg.italic, num.seg.color)
+        num.parsed = parsed
+        drop.add(idxs[0] if placements[idxs[0]] is cur else idxs[1])
+    return [pl for k, pl in enumerate(placements) if k not in drop]
+
+
+def check_totals(placements: list[Placement]) -> dict | None:
+    """Valida subtotal + IVA = total en las filas etiquetadas así.
+
+    Devuelve None si no están las tres filas o si la suma cuadra (±0,01).
+    Si no cuadra, devuelve {'subtotal', 'iva', 'total', 'cells', 'message'}:
+    las celdas (fila, columna) de los tres valores y el aviso en español.
+    NUNCA cambia un valor: solo sirve para marcar las celdas como dudosas.
+    """
+    import re
+
+    found: dict[str, tuple[float, tuple[int, int]]] = {}
+    rows: dict[int, list[Placement]] = {}
+    for pl in placements:
+        rows.setdefault(pl.row, []).append(pl)
+    for r, pls in rows.items():
+        label = " ".join(p.seg.text for p in sorted(pls, key=lambda p: p.col)).upper()
+        # La cifra de la fila: group_rows puede haber unido "SUBTOTAL $ 100.00"
+        # en un solo segmento, así que se buscan los números dentro del texto.
+        # Gana el último número "con pinta de dinero" (con decimales o tras
+        # un símbolo de moneda); si no hay ninguno, el último número.
+        money: list[tuple[float, tuple[int, int]]] = []
+        plain: list[tuple[float, tuple[int, int]]] = []
+        for p in sorted(pls, key=lambda p: p.col):
+            tokens = p.seg.text.split()
+            for k, tok in enumerate(tokens):
+                parsed = parse_number(tok)
+                if parsed is None:
+                    continue
+                prev = tokens[k - 1] if k else ""
+                (money if ('.' in tok or ',' in tok or _lone_currency(prev)) else plain).append(
+                    (parsed.value, (p.row, p.col)))
+        nums = money or plain
+        if not nums:
+            continue
+        value, cell = nums[-1]  # la cifra de la fila (la de la derecha)
+        if "SUBTOTAL" in label:
+            found.setdefault("subtotal", (value, cell))
+        elif "IVA" in label or re.search(r"\bI\.?V\.?A\.?\b", label):
+            found.setdefault("iva", (value, cell))
+        elif "TOTAL" in label:
+            found.setdefault("total", (value, cell))
+    if not {"subtotal", "iva", "total"} <= found.keys():
+        return None
+    sub, iva, total = (found[k][0] for k in ("subtotal", "iva", "total"))
+    if abs((sub + iva) - total) <= 0.01:
+        return None
+    return {
+        "subtotal": sub,
+        "iva": iva,
+        "total": total,
+        "cells": [found[k][1] for k in ("subtotal", "iva", "total")],
+        "message": (f"La suma del subtotal ($ {sub:,.2f}) + IVA ($ {iva:,.2f}) "
+                    f"no coincide con el total impreso ($ {total:,.2f}). "
+                    f"Revisa esas cifras antes de usar el archivo."),
+    }
 
 
 def _is_low_confidence(seg: Segment, model: PageModel) -> bool:
@@ -464,7 +558,8 @@ def _is_low_confidence(seg: Segment, model: PageModel) -> bool:
 def _page_to_sheet(ws, model: PageModel, start_row: int = 0, formulas: bool = True) -> dict:
     """Escribe una página en la hoja a partir de `start_row` (0 = primera fila).
 
-    Devuelve {'rows': filas escritas, 'formulas': [refs], 'low_confidence_cells': [refs]}.
+    Devuelve {'rows': filas escritas, 'formulas': [refs], 'low_confidence_cells': [refs],
+    'totals_warning': aviso en español si subtotal+IVA != total (o None)}.
     """
     lay = build_layout(model)
     rows, cols, bounds, fills, borders = lay.rows, lay.cols, lay.bounds, lay.fills, lay.borders
@@ -515,6 +610,19 @@ def _page_to_sheet(ws, model: PageModel, start_row: int = 0, formulas: bool = Tr
         except ValueError:
             pass  # ya fusionada por otra regla: se deja como está
 
+    # --- validación subtotal + IVA = total (solo OCR: el texto nativo es exacto).
+    # Nunca cambia valores: si no cuadra, las tres celdas quedan en amarillo y
+    # el aviso en español va a la advertencia de OCR.
+    totals_warning: str | None = None
+    if model.ocr_used:
+        totals = check_totals(lay.placements)
+        if totals:
+            totals_warning = totals["message"]
+            for r, c in totals["cells"]:
+                cell = ws.cell(row=off + r + 1, column=c + 1)
+                cell.fill = PatternFill("solid", start_color="FFF2CC", end_color="FFF2CC")
+                low_cells.append(f"{get_column_letter(c + 1)}{off + r + 1}")
+
     # --- fórmulas de totales (solo si la suma coincide con lo impreso)
     formula_refs: list[str] = []
     if formulas:
@@ -550,7 +658,8 @@ def _page_to_sheet(ws, model: PageModel, start_row: int = 0, formulas: bool = Tr
     ws.page_setup.paperSize = 9 if abs(model.width - 595) < 20 else 1
     ws.page_margins.left = ws.page_margins.right = 0.25
     ws.page_margins.top = ws.page_margins.bottom = 0.25
-    return {"rows": len(bounds) - 1, "formulas": formula_refs, "low_confidence_cells": low_cells}
+    return {"rows": len(bounds) - 1, "formulas": formula_refs,
+            "low_confidence_cells": low_cells, "totals_warning": totals_warning}
 
 
 def _total_formulas_offset(ws, lay: Layout, off: int) -> list[str]:
@@ -609,6 +718,10 @@ def pdf_to_excel(src: str, dst: str, ocr: bool = True, ocr_lang: str = "spa+eng"
             info["scanned_pages"] += int(model.scanned)
             info["formulas"].extend(result["formulas"])
             info["low_confidence_cells"].extend(result["low_confidence_cells"])
+            if result.get("totals_warning"):
+                info["totals_warning"] = result["totals_warning"]
+                prev = info.get("ocr_warning")
+                info["ocr_warning"] = f"{prev} {result['totals_warning']}" if prev else result["totals_warning"]
             if model.ocr_confidences:
                 warning = ocr_warning(model.ocr_confidences)
                 if warning:
