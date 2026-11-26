@@ -174,8 +174,13 @@ jobs:
         run: npx playwright install --with-deps chromium firefox webkit
         working-directory: tests/browser
       - name: Pruebas unitarias del motor web (si existen)
+        # OJO: este paso corre con working-directory: web/engine, así que
+        # las rutas son relativas a web/engine (antes decía
+        # "web/engine/tests" y la condición siempre era falsa: npm ci no
+        # se ejecutaba nunca, vite no se instalaba y el build fallaba con
+        # "Cannot find package 'vite'" en la CI #153).
         run: |
-          if [ -d web/engine/tests ] && [ "$(ls -A web/engine/tests)" ]; then
+          if [ -d tests ] && [ "$(ls -A tests)" ]; then
             npm ci
             npm test
           else
