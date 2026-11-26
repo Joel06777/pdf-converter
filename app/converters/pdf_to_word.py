@@ -188,6 +188,13 @@ def _grid_to_docx(src: str, dst: str, models: list[PageModel], on_progress=None,
         table = out.add_table(rows=len(bounds) - 1, cols=len(cols))
         table.autofit = False
         _fixed_table(table)
+        # Anchos reales de columna en la cuadrícula (tblGrid): sin esto
+        # python-docx deja las columnas iguales y el texto se desplaza de su
+        # posición del PDF (p. ej. el texto de firmas cae sobre los QR).
+        # cell.width solo toca tcW, que el layout fijo ignora; la cuadrícula
+        # es la que manda en Word y en LibreOffice.
+        for j, col in enumerate(cols):
+            table.columns[j].width = Pt(col.right - col.left)
         for i, row in enumerate(table.rows):
             row.height = Pt(max(1.0, bounds[i + 1] - bounds[i]))
             row.height_rule = WD_ROW_HEIGHT_RULE.EXACTLY
@@ -205,7 +212,13 @@ def _grid_to_docx(src: str, dst: str, models: list[PageModel], on_progress=None,
 
         # En Word el texto no "desborda" a la celda vecina como en Excel: se combinan las celdas
         # libres que el texto ocupa en el PDF.
-        occupied = {(p.row, p.col) for p in lay.placements}
+        # Celdas ya ocupadas: orígenes de todos los textos MÁS los rangos
+        # fusionados que cada texto va reservando. Sin los rangos, el
+        # "desbordar" de un texto alineado a la derecha se metía dentro de la
+        # fusión del texto vecino y ambos acababan en un mismo párrafo (con la
+        # alineación del último), desplazando el texto sobre las imágenes
+        # (p. ej. "Validar..." de firmas sobre el QR de Andrés Pacheco).
+        taken = {(p.row, p.col) for p in lay.placements}
         vmerges = _vertical_merges(model, lay)
         vmerge_tops = {(top, j) for top, j, _ in vmerges}
         for pl in lay.placements:
@@ -219,24 +232,25 @@ def _grid_to_docx(src: str, dst: str, models: list[PageModel], on_progress=None,
                     j0 = _col_index(cols, pl.seg.x0 + 0.5)
             n_cols = len(cols)
             shrunk = False
-            while j1 > pl.col and any((pl.row, c) in occupied for c in range(pl.col + 1, j1 + 1)):
+            while j1 > pl.col and any((pl.row, c) in taken for c in range(pl.col + 1, j1 + 1)):
                 j1 -= 1
                 shrunk = True
-            while j0 < pl.col and any((pl.row, c) in occupied for c in range(j0, pl.col)):
+            while j0 < pl.col and any((pl.row, c) in taken for c in range(j0, pl.col)):
                 j0 += 1
                 shrunk = True
             if not shrunk and pl.merge_to is None and not pl.parsed:
                 # "desbordar" como en Excel: usar también las celdas libres que siguen
                 if pl.horizontal == "left":
-                    while j1 + 1 < n_cols and (pl.row, j1 + 1) not in occupied:
+                    while j1 + 1 < n_cols and (pl.row, j1 + 1) not in taken:
                         j1 += 1
                 elif pl.horizontal == "right":
-                    while j0 - 1 >= 0 and (pl.row, j0 - 1) not in occupied:
+                    while j0 - 1 >= 0 and (pl.row, j0 - 1) not in taken:
                         j0 -= 1
             if (pl.row, pl.col) in vmerge_tops:
                 # Inicio de una fusión vertical: no se fusiona en horizontal, o el
                 # rango vertical posterior dejaría de ser rectangular.
                 j0 = j1 = pl.col
+            taken.update((pl.row, c) for c in range(j0, j1 + 1))
             cell = table.cell(pl.row, j0)
             if j1 > j0:
                 cell = cell.merge(table.cell(pl.row, j1))
@@ -265,16 +279,24 @@ def _grid_to_docx(src: str, dst: str, models: list[PageModel], on_progress=None,
             except Exception:
                 pass
 
-        first_para = table.cell(0, 0).paragraphs[0]
-        for img in model.images:
-            if img.full_page and model.scanned and lay.rows:
-                continue
-            _anchored_picture(first_para, img.png, img.x0, img.y0, img.x1 - img.x0, img.y1 - img.y0)
-
+        # Párrafo propio y vacío para las imágenes ancladas: antes se anclaban
+        # al párrafo de la primera celda, que lleva texto, y las imágenes
+        # flotantes quedaban ligadas a ese texto. Es el párrafo mínimo que
+        # Word exige tras la tabla (1 pt): cabe en el margen inferior
+        # reservado (4 pt), así que no empuja la tabla a otra página.
         tail = out.add_paragraph()  # Word exige un párrafo tras la tabla: lo dejamos mínimo
         tail.paragraph_format.space_before = tail.paragraph_format.space_after = Pt(0)
         tail.paragraph_format.line_spacing = Pt(1)
         tail.add_run().font.size = Pt(1)
+        max_w = cols[-1].right - cols[0].left
+        for img in model.images:
+            if img.full_page and model.scanned and lay.rows:
+                continue
+            w, h = img.x1 - img.x0, img.y1 - img.y0
+            if w > max_w:  # la imagen no cabe en el ancho disponible: se reduce
+                h = h * max_w / w
+                w = max_w
+            _anchored_picture(tail, img.png, img.x0, img.y0, w, h)
         if on_progress is not None:
             on_progress(n + 1, len(models))
     out.save(dst)
