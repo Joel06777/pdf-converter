@@ -1,0 +1,10 @@
+node_modules/
+.tessdata/
+sizes.json
+*.log
+# Generados por `npm run build` (scripts/build-browser.mjs): no se suben,
+# se regeneran desde node_modules en cada despliegue.
+dist/
+vendor/
+index.js
+.build-tmp/
