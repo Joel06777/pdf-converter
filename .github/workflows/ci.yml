@@ -41,3 +41,109 @@ jobs:
           docker run -d --name api -p 8000:8000 -e REDIS_URL= -e STORAGE_DIR=/data/jobs pdf-converter:ci
           sleep 8
           curl -f http://localhost:8000/health
+      - name: Humo de la API dentro del contenedor (factura.pdf -> Excel)
+        run: |
+          # Sube tests/fixtures/factura.pdf a /api/v1/convert, espera a que el
+          # trabajo termine y descarga el .xlsx. Comprueba 202 + done + 200.
+          CODE=$(curl -s -o /tmp/convert.json -w "%{http_code}" \
+            -F "file=@tests/fixtures/factura.pdf" -F "target=excel" \
+            http://localhost:8000/api/v1/convert)
+          test "$CODE" = "202" || { echo "convert devolvió $CODE"; cat /tmp/convert.json; exit 1; }
+          JOB=$(python3 -c 'import json; print(json.load(open("/tmp/convert.json"))["job_id"])')
+          echo "job_id=$JOB"
+          STATUS=""
+          for i in $(seq 1 60); do
+            STATUS=$(curl -s "http://localhost:8000/api/v1/jobs/$JOB" | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])')
+            echo "intento $i: $STATUS"
+            if [ "$STATUS" = "done" ]; then break; fi
+            if [ "$STATUS" = "error" ]; then echo "la conversión terminó en error"; docker logs api; exit 1; fi
+            sleep 2
+          done
+          test "$STATUS" = "done"
+          curl -f -o /tmp/factura.xlsx "http://localhost:8000/api/v1/jobs/$JOB/download"
+          test -s /tmp/factura.xlsx
+          python3 -c "print(open('/tmp/factura.xlsx','rb').read(2))" | grep -q "PK" && echo "xlsx válido (firma PK)"
+      - name: Parar el contenedor
+        if: always()
+        run: docker rm -f api || true
+
+  docker-build-arm64:
+    # Imagen para Oracle Always Free (Ampere ARM, linux/arm64). El runner es
+    # amd64, así que la construcción y la ejecución usan QEMU (emulación):
+    # es lenta (el build con pip puede tardar 10-20 min) y solo valida que la
+    # imagen arranca y convierte en ARM64, no su rendimiento. El rendimiento
+    # real en ARM hay que medirlo en la instancia Oracle, no aquí.
+    # Ruedas aarch64 verificadas en PyPI (ver comentario en Dockerfile):
+    # pymupdf==2.2, numpy==2.5.3, pillow==12.3.0 y opencv-python-headless
+    # publican ruedas manylinux_aarch64, así que no se compila nada.
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar QEMU y Buildx
+        uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Construir la imagen para linux/arm64
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          tags: pdf-converter:ci-arm64
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Comprobar la arquitectura y las ruedas nativas en ARM64
+        run: |
+          docker run --rm --platform linux/arm64 pdf-converter:ci-arm64 \
+            python -c "import platform, pymupdf, numpy, PIL, cv2; \
+              print(platform.machine(), pymupdf.__version__, numpy.__version__, PIL.__version__, cv2.__version__)"
+      - name: Arrancar la API ARM64 y comprobar /health
+        run: |
+          docker run -d --name api-arm64 --platform linux/arm64 -p 8000:8000 \
+            -e REDIS_URL= -e STORAGE_DIR=/data/jobs pdf-converter:ci-arm64
+          for i in $(seq 1 30); do
+            sleep 10
+            curl -f http://localhost:8000/health && break
+            echo "esperando /health (intento $i)"
+          done
+          curl -f http://localhost:8000/health
+      - name: Humo de la API en ARM64 (factura.pdf -> Excel)
+        run: |
+          CODE=$(curl -s -o /tmp/convert-arm64.json -w "%{http_code}" \
+            -F "file=@tests/fixtures/factura.pdf" -F "target=excel" \
+            http://localhost:8000/api/v1/convert)
+          test "$CODE" = "202" || { echo "convert devolvió $CODE"; cat /tmp/convert-arm64.json; docker logs api-arm64; exit 1; }
+          JOB=$(python3 -c 'import json; print(json.load(open("/tmp/convert-arm64.json"))["job_id"])')
+          STATUS=""
+          for i in $(seq 1 90); do
+            STATUS=$(curl -s "http://localhost:8000/api/v1/jobs/$JOB" | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])')
+            if [ "$STATUS" = "done" ]; then break; fi
+            if [ "$STATUS" = "error" ]; then echo "la conversión terminó en error"; docker logs api-arm64; exit 1; fi
+            sleep 2
+          done
+          test "$STATUS" = "done"
+          curl -f -o /tmp/factura-arm64.xlsx "http://localhost:8000/api/v1/jobs/$JOB/download"
+          test -s /tmp/factura-arm64.xlsx
+      - name: Pruebas rápidas dentro del contenedor ARM64
+        # Subconjunto rápido (no la suite completa: bajo emulación QEMU la
+        # suite entera, con OCR, es demasiado lenta). La imagen no lleva
+        # pytest ni los tests, así que se montan y se instala pytest+httpx
+        # dentro del contenedor. Se ejecuta: salud/métricas, rechazos 400,
+        # flujo completo a Excel y las pruebas de capacidad (tope de cola y
+        # tope de OCR). La suite completa en ARM64 queda pendiente de una
+        # instancia ARM nativa (Oracle Always Free).
+        run: |
+          docker rm -f api-arm64 || true
+          docker run --rm --platform linux/arm64 \
+            -v "$PWD/tests:/srv/tests:ro" \
+            -e REDIS_URL= -e STORAGE_DIR=/tmp/jobs-arm64 \
+            pdf-converter:ci-arm64 \
+            sh -c "mkdir -p /tmp/jobs-arm64 && pip install -q --user pytest httpx && python -m pytest -q \
+              tests/test_api.py::test_health_and_metrics \
+              tests/test_api.py::test_rejects_non_pdf \
+              tests/test_api.py::test_rejects_bad_target \
+              tests/test_api.py::test_full_flow_excel \
+              tests/test_capacidad.py -p no:cacheprovider"
+      - name: Parar el contenedor
+        if: always()
+        run: docker rm -f api-arm64 || true
