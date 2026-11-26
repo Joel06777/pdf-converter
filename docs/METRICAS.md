@@ -4,13 +4,17 @@ Generadas con `python scripts/measure_metrics.py`, `python scripts/measure_ocr.p
 y con las pruebas de `tests/test_converters.py` y `tests/test_fixtures.py`.
 
 ## Entorno de medición
-- VM Linux, Python 3.12.3, PyMuPDF 2.2, Tesseract 5.3.4 (`spa+eng`), OCRmyPDF 15.2.0.
+- VM Linux, Python 3.12.3, PyMuPDF 2.2, Tesseract 5.3.4 (`spa+eng`).
+  OCRmyPDF **no** está instalado en esta VM (es opcional: el código lo
+  omite sin error si falta; la CI sí lo instala). Tesseract se perdió al
+  recrearse la VM y se reinstaló el 26 nov 2026 (ver §1.7 de
+  `docs/INFORME_FINAL.md`).
 - Pruebas: **119 passed, 0 failed, 2 warnings** (`pytest -q`, 26 nov 2026,
-  171 s, re-medido por el coordinador): 69 de la base + 50 nuevas de la
-  ronda del navegador primero (42 estructurales QR + 3 renderizadas +
-  3 de rendimiento + 2 de Nº). Los 2 fallos que aparecían sin Tesseract
-  instalado eran tests OCR; con Tesseract 5.3.4 + OCRmyPDF 15.2.0
-  instalados, todo pasa.
+  120,42 s, re-medido tras la corrección de la prueba de rendimiento de
+  Word): 69 de la base + 50 nuevas de la ronda del navegador primero
+  (42 estructurales QR + 3 renderizadas + 3 de rendimiento + 2 de Nº).
+  Sin Tesseract instalado, 2 pruebas de OCR fallaban; con Tesseract
+  5.3.4 instalado, todo pasa.
 - Los tiempos son de una sola ejecución en este entorno y varían entre corridas;
   sirven como orden de magnitud, no como garantía.
 
@@ -128,6 +132,20 @@ que `table.cell()` de python-docx reconstruye la lista completa de celdas
 en cada llamada; ahora se usa un índice propio de celdas. Referencia
 4,27 s → 1,18 s; tabla grande de 50 filas 1,35 s → 0,36 s; estado de
 cuenta de 6 páginas 1,06 s → 0,62 s; estado multipágina 0,67 s → 0,43 s.
+
+Re-medición 26 nov 2026 (tras la corrección de la prueba de rendimiento,
+`tests/test_word_perf.py`): referencia 0,76 s (mejor de 5) y 0,78–0,84 s
+en 10 repeticiones sueltas; tabla grande 0,36 s; estado 6p 0,58–0,59 s.
+La guarda de rendimiento ya no es un tiempo absoluto sino el cociente
+Word/Excel (mejor de 3, mismo proceso): referencia 2,70–2,97, tabla
+grande 3,48–3,75, estado 6p 3,87–4,04; el cociente apenas se mueve con
+carga de CPU (variación <= 8 %), mientras que en GitHub Actions una sola
+medición de Word llegó a 3,95 s (corredor ~5x más lento que esta VM) y
+tumbó la guarda absoluta antigua en las ejecuciones #126–#132. Con el
+código antiguo simulado (`table.cell()` en vez del índice plano) los
+cocientes suben a 10,55 / 9,10 / 6,32 y la guarda salta en las 3 pruebas.
+Detalle y umbrales (4,5 / 5,6 / 5,2) en el docstring de
+`tests/test_word_perf.py`.
 
 El OCR domina el tiempo (~4–6 s por página). Word en el documento de
 referencia tarda más (~4,6 s) por la reconstrucción de la tabla con
