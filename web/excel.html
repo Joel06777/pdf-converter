@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF a Excel gratis — convierte tablas de PDF a .xlsx en tu dispositivo</title>
+<meta name="description" content="Convierte un PDF a Excel (.xlsx) gratis y sin subirlo a ningún servidor. Las tablas quedan editables, con cifras reales y fórmulas de totales cuando cuadran. Elige una hoja por página, una hoja continua o una hoja por tabla.">
+<meta name="theme-color" content="#0f766e">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; worker-src 'self' blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
+<link rel="stylesheet" href="./styles.css">
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Convertidor PDF a Excel",
+  "applicationCategory": "UtilitiesApplication",
+  "operatingSystem": "Navegador web",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "description": "Convierte un PDF a Excel (.xlsx) gratis, en tu propio dispositivo, sin subir el archivo a ningún servidor."
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    { "@type": "Question", "name": "¿Mi PDF se sube a algún servidor al convertirlo a Excel?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. La conversión ocurre en tu propio dispositivo, en el navegador. El archivo no sale de tu computadora ni de tu celular." } },
+    { "@type": "Question", "name": "¿Las cifras del PDF quedan como números en Excel?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Sí: las cifras se escriben como valores numéricos reales, con su formato de moneda cuando se detecta. Los totales llevan fórmula solo cuando la suma coincide con lo impreso en el PDF." } },
+    { "@type": "Question", "name": "¿Puedo unir varios PDF en un solo libro de Excel?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Sí: elige varios archivos, destino Excel y marca «Unir varios PDF en un solo libro». Cada PDF queda en sus propias hojas." } },
+    { "@type": "Question", "name": "¿Qué pasa con las celdas que el OCR no lee con seguridad?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Quedan marcadas en amarillo en el Excel y puedes corregirlas en la página antes de descargar." } }
+  ]
+}
+</script>
+</head>
+<body>
+<header class="site">
+  <nav aria-label="Herramientas">
+    <a href="./index.html">Convertidor</a>
+    <a href="./excel.html" aria-current="page">PDF a Excel</a>
+    <a href="./word.html">PDF a Word</a>
+    <a href="./pptx.html">PDF a PowerPoint</a>
+    <a href="./privacy.html">Privacidad</a>
+  </nav>
+  <h1>PDF a Excel, gratis y en tu dispositivo</h1>
+  <p class="sub">Convierte las tablas de tu PDF a un libro de Excel (.xlsx) editable: cifras como números reales, formato conservado y fórmulas de totales cuando cuadran. Sin cuentas, sin subir tu archivo a ningún servidor.</p>
+  <p><a class="download" href="./index.html?target=excel">Convertir un PDF a Excel ahora</a></p>
+</header>
+<main>
+  <section class="card">
+    <h2>Cómo funciona</h2>
+    <ol class="steps">
+      <li><strong>Elige tu PDF</strong> (arrastra o pulsa «elige un archivo»). Puedes elegir varios a la vez.</li>
+      <li><strong>Elige el diseño del Excel:</strong> una hoja por página del PDF, una sola hoja continua con todo el documento, o una hoja por cada tabla detectada.</li>
+      <li><strong>Si quieres, limita el rango de páginas</strong> (útil con PDFs grandes en celulares).</li>
+      <li><strong>Revisa la vista previa y corrige las celdas dudosas</strong> del escaneado antes de descargar.</li>
+      <li><strong>Descarga el .xlsx</strong> (o todos los resultados en un ZIP, o varios PDF unidos en un solo libro).</li>
+    </ol>
+  </section>
+  <section class="card">
+    <h2>Qué queda bien y qué no</h2>
+    <p><strong>Queda bien:</strong> estados de cuenta, facturas y reportes con tablas claras; las cifras llegan como números, no como texto, y los totales llevan fórmula cuando la suma coincide con lo impreso.</p>
+    <p><strong>Cuesta más:</strong> tablas sin líneas ni alineación clara, gráficos vectoriales dentro de tablas (quedan como imagen) y escaneos borrosos o manuscritos. En esos casos la página te avisa con el informe de calidad y marca las celdas dudosas en amarillo. Detalle completo en <a href="https://github.com/Joel06777/pdf-converter/blob/main/docs/LIMITES.md">los límites conocidos</a>.</p>
+  </section>
+  <section class="card faq">
+    <h2>Preguntas frecuentes</h2>
+    <details><summary>¿Mi PDF se sube a algún servidor?</summary><p>No. La conversión ocurre en tu propio dispositivo. Lee la <a href="./privacy.html">política de privacidad</a>.</p></details>
+    <details><summary>¿Las cifras quedan como números?</summary><p>Sí, con su formato de moneda cuando se detecta. Si una cifra se pegó a otra en el PDF, el informe de calidad lo muestra.</p></details>
+    <details><summary>¿Puedo unir varios PDF en un solo libro?</summary><p>Sí: elige varios archivos, destino Excel y marca «Unir varios PDF en un solo libro».</p></details>
+    <details><summary>¿Funciona con PDFs escaneados?</summary><p>Sí, con OCR. Las celdas dudosas se marcan en amarillo y puedes corregirlas antes de descargar.</p></details>
+    <details><summary>¿Cuánto cuesta?</summary><p>Nada. Es gratis y no necesitas cuenta.</p></details>
+  </section>
+</main>
+<footer class="site">
+  <nav aria-label="Enlaces del pie">
+    <a href="https://github.com/Joel06777/pdf-converter">Código fuente</a>
+    <a href="./privacy.html">Política de privacidad</a>
+    <a href="https://github.com/Joel06777/pdf-converter/issues/new">Reportar una incidencia</a>
+  </nav>
+  <p>Convertidor PDF a Excel. Software libre bajo licencia AGPL-3.0. El archivo no sale de tu dispositivo.</p>
+</footer>
+</body>
+</html>
