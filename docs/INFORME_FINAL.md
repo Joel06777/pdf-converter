@@ -216,6 +216,76 @@ ejecución (ver `.github/workflows/ci.yml`).
 - Prueba de rendimiento de Word: reescrita como guarda de ratio
   Word/Excel (ver §1.7); pasa 3 de 3 veces en local y detecta la
   regresión simulada en las 3 pruebas.
+- Job `browser` de la CI: la condición del workflow nunca ejecutaba
+  `npm ci` (ruta relativa incorrecta) y la URL de descarga de
+  tessdata del build era 404; ambas corregidas y verificadas en una
+  copia limpia (ver §1.9): vitest 80 passed, build exit 0,
+  Playwright Chromium 3 passed y Pixel 7: 3 passed.
+
+### 1.9 El job `browser` de la CI fallaba: vite no se instalaba y la URL de tessdata era 404 (corregido, 26 nov 2026)
+
+**Problema 1 — la condición del CI nunca instalaba las dependencias del
+motor.** La CI #153 (head `d9b9bf8`) quedó en rojo: el job `test` pasó
+(la corrección de §1.7 quedó verificada en GitHub), `docker-build` y
+`docker-build-arm64` pasaron, pero el job `browser` falló al construir
+el motor: `Error: Cannot find package 'vite'` en
+`web/engine/scripts/build-browser.mjs`. Causa raíz: el paso «Pruebas
+unitarias del motor web» corre con `working-directory: web/engine`,
+pero su condición decía `[ -d web/engine/tests ]`, es decir, buscaba
+`web/engine/web/engine/tests`, que no existe. La condición siempre era
+falsa, así que `npm ci` **nunca** se ejecutaba en la CI, vite
+(devDependency) nunca se instalaba y el build fallaba. De paso, las
+pruebas unitarias del motor (vitest) tampoco se ejecutaban nunca en
+la CI: el paso imprimía en silencio «sin pruebas unitarias todavía».
+
+**Corrección.** En `.github/workflows/ci.yml` la condición ahora usa
+rutas relativas a `web/engine` (`[ -d tests ]`), con un comentario que
+explica la trampa. No se tocó nada más del workflow.
+
+**Verificación (en una copia limpia que imita un checkout de CI, sin
+`node_modules`, `dist/`, `vendor/`, `.tessdata/` ni `index.js`).**
+Con la condición antigua la evaluación da FALSO (se saltaría `npm ci`,
+como pasó en la #153); con la corregida da VERDADERO. Después de
+`npm ci` (5 s, 256 paquetes), vite 8.4.0 queda instalado y es
+importable; `npm test` da **9 archivos, 80 passed** (con OCR
+ejecutándose de verdad: escaneado texto=1,0 cifras=1,0; foto con
+perspectiva texto=0,9677 cifras=1,0).
+
+**Problema 2 — el build descargaba los datos de idioma de una URL que
+no existe.** Al correr `npm run build` en la copia limpia, el build
+(vite) funcionó — `index.js` y `dist/worker.js` se generaron — pero
+falló en `ensureTessdata()`: intentaba descargar
+`https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/eng.traineddata.gz`
+y el servidor devuelve **404** (medido con `curl`: 404 en spa y en
+eng). El repo `tessdata_fast` no publica archivos `.traineddata.gz`.
+En la CI este fallo habría aparecido justo después de arreglar el de
+vite, porque `.tessdata/` no está en el repo (está en `.gitignore`) y
+el build no podía reutilizar nada.
+
+**Corrección.** En `web/engine/scripts/build-browser.mjs` la descarga
+ahora usa la misma fuente que ya funcionaba en `tests/helpers.js`:
+`https://github.com/tesseract-ocr/tessdata_fast/raw/main/{spa,eng}.traineddata`
+(medido: 200, spa 2.294.433 bytes y eng 4.113.088 bytes) y comprime el
+archivo a `.traineddata.gz` con `zlib.gzipSync`, que es el formato que
+exige tesseract.js v7. Además se reintenta hasta 5 veces con 5 s
+entre intentos: en esta VM la descarga de eng falló 3 veces seguidas
+por la red y minutos después la misma URL dio 200, así que un solo
+intento es demasiado frágil.
+
+**Verificación.** Build completo desde cero en la copia limpia: exit 0
+en 17 s; `dist/` tiene 5 archivos, 8,68 MB en total;
+`.tessdata/eng.traineddata.gz` 1.962.155 bytes y
+`spa.traineddata.gz` 1.125.535 bytes (los dos por encima de lo que
+exige `tests/sizes.test.js`). La descarga de eng necesitó el intento
+2/5, así que el reintento ya demostró su valor aquí.
+
+**Playwright en esta VM (con el motor ya construido).** Chromium: 3
+passed, 1 skipped (9,4–12,9 s por corrida); móvil Pixel 7: 3 passed,
+1 skipped (8,8 s); Firefox: 1 passed, 3 skipped (la prueba de
+privacidad sí pasa en Firefox; las de conversión son solo Chromium y
+móvil por diseño). WebKit: 3 fallos al lanzar, «Host system is missing
+dependencies to run browsers» — limitación de esta VM, no del código;
+en CI se instala con `playwright install --with-deps webkit`.
 
 ## 2. Resultados de las verificaciones
 
@@ -241,12 +311,24 @@ Era 72; +7 de `tests/word-mode.test.js` y +1 de no duplicación en
 diagnóstico y quedan en el repositorio como referencia; no forman
 parte de la suite.
 
+Repetido el 26 nov 2026 en una copia limpia (sin `node_modules`,
+`dist/`, `vendor/`, `.tessdata/` ni `index.js`, como un checkout de
+CI): tras `npm ci`, **9 archivos, 80 passed**, con el OCR
+ejecutándose de verdad (escaneado texto=1,0 cifras=1,0 en 8,8 s; foto
+con perspectiva texto=0,9677 cifras=1,0 en 8,7 s).
+
 ### Build del motor para el navegador
 
 ```bash
 cd web/engine && npm run build
 # exit 0; dist/ tiene 5 archivos, 8,68 MB en total
 ```
+
+Repetido el 26 nov 2026 desde cero en la copia limpia, tras la
+corrección de la URL de tessdata (§1.9): exit 0 en 17 s; `dist/` 5
+archivos, 8,68 MB; `.tessdata/eng.traineddata.gz` 1.962.155 bytes y
+`spa.traineddata.gz` 1.125.535 bytes. Antes de la corrección el build
+fallaba con 404 al descargar los datos de idioma.
 
 ### Playwright (web real, ejecutado por mí en esta VM)
 
@@ -266,6 +348,13 @@ cd tests/browser && npx playwright test
   instala con `playwright install --with-deps webkit`. Queda sin
   verificar en esta VM, como en las rondas anteriores.
 
+Repetido el 26 nov 2026 por proyectos, con el motor construido:
+Chromium 3 passed, 1 skipped (12,9 s); móvil Pixel 7: 3 passed, 1
+skipped (8,8 s); Firefox: 1 passed, 3 skipped (la privacidad pasa;
+las de conversión son solo Chromium y móvil por diseño); WebKit: 3
+failed al lanzar, mismo motivo («Host system is missing
+dependencies»).
+
 ### CI en GitHub Actions
 
 No ejecutada aquí (no hay `.git` local ni acceso de escritura a
@@ -279,8 +368,15 @@ ejecuciones #139–#142 estaban en curso y #143–#149 en cola (una
 ejecución por cada push de la subida). Las ejecuciones #126–#132
 habían fallado por la prueba de rendimiento de Word que se corrige
 en §1.7 (3,95 s frente al límite de 3,0 s) y las #133–#138 habían
-pasado en verde (~18 min cada una). La verificación final en verde
-la hace el dueño tras el push de esta corrección (ver §5.1).
+pasado en verde (~18 min cada una).
+
+**Actualización 26 nov 2026, 11:44 (revisión programada de la CI):**
+la ejecución #153 para el head `d9b9bf8` quedó en rojo, pero el job
+`test` PASÓ (la corrección de §1.7 quedó verificada en GitHub) y
+`docker-build` y `docker-build-arm64` pasaron. Falló solo el job
+`browser` por el error de vite que se corrige en §1.9 (la condición
+del workflow nunca ejecutaba `npm ci`). La verificación final en
+verde la hace el dueño tras el push de esta corrección (ver §5.1).
 
 ## 3. Métricas (paridad final, 26 nov 2026)
 
@@ -402,7 +498,7 @@ muy próximos. Detalle en `scripts/parity/COMPARACION.md`.
 | Word cobertura 1,0 y cero solapes | **Cobertura sí** (0,9982/1,0; celdas 1,0); **solapes sin verificar** en Word real (solo LibreOffice en la ronda 2 para el QR) |
 | OCR cifras ≥99% y texto ≥97% en escaneos limpios; celdas dudosas marcadas | **Python sí** en cifras (100% en 5 casos) y texto 88,9%–100,0% (el escaneado de referencia queda en 88,9%, por debajo del 97%); **navegador solo en Node**, no en navegador real |
 | Visual sobre umbral definido | **Sin umbral formal**; medida solo en 8 Word de Python |
-| Navegadores Chromium, Firefox y WebKit en CI, con emulación de celular | **Chromium y Firefox pasan aquí**; WebKit sin medir aquí (solo en CI); Pixel 7 emulado pasa |
+| Navegadores Chromium, Firefox y WebKit en CI, con emulación de celular | **Chromium, Firefox y Pixel 7 pasan aquí** (medido 26 nov 2026: Chromium 3 passed, Pixel 7: 3 passed, Firefox privacidad pasa); WebKit sin medir aquí (solo en CI). La CI #153 falló solo en el job `browser` por vite/tessdata, corregido en §1.9; pendiente verificar la CI en verde tras el push |
 | Privacidad: cero peticiones de red durante la conversión | **Sí** (privacy.spec.js: 6 peticiones estáticas locales, 0 externas) |
 | Rendimiento por formato y dispositivo | **Parcial**: tiempos medidos en Node y en Playwright (una ejecución por caso); memoria no medida; sin celular real ni PDF de 10 páginas a Excel en el navegador |
 | Descarga: tamaños reales y capacidad mensual | **Sí** (Brotli, ver §3) |
