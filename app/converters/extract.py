@@ -327,7 +327,22 @@ def _binarized_copy(page: pymupdf.Page) -> tuple[pymupdf.Page, bytes, float]:
     if abs(angle) >= 0.5:
         # BICUBIC (no NEAREST): el remuestreo por vecino degrada el texto y el OCR.
         img = img.rotate(angle, fillcolor=255, resample=Image.BICUBIC)
-    img = ImageOps.autocontrast(img, cutoff=1).point(lambda v: 0 if v < 150 else 255)
+    # autocontrast: estira el contraste, pero con un guarda para páginas con
+    # muy poco texto. Con cutoff=1, en páginas con <1 % de píxeles oscuros el
+    # percentil 1 cae en un gris claro y TODO por debajo se vuelve negro
+    # (medido: los píxeles negros se triplicaban y el texto salía duplicado
+    # e ilegible). Con cutoff=0 eso no pasa, pero en fotos inclinadas el
+    # engrosado leve de cutoff=1 ayuda a leer dígitos finos tras el giro
+    # (medido: la cantidad "5" se perdía con cutoff=0). Por eso cutoff=1
+    # solo cuando hay al menos 1 % de píxeles oscuros, que es justo el
+    # percentil que recorta: en ese caso lo es un gris oscuro y el texto
+    # queda intacto. cutoff=0 sigue estirando min/max (texto gris sobre
+    # fondo gris), solo sin recortar.
+    import numpy as np
+
+    black_frac = float((np.asarray(img) < 150).mean())
+    cutoff = 1 if black_frac >= 0.01 else 0
+    img = ImageOps.autocontrast(img, cutoff=cutoff).point(lambda v: 0 if v < 150 else 255)
     img = _remove_rules(img)
     buf = BytesIO()
     img.save(buf, "PNG")
