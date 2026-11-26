@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Convertidor PDF a Word, Excel y PowerPoint — gratis, en tu dispositivo</title>
+<meta name="description" content="Convierte tu PDF a Word (.docx), Excel (.xlsx) o PowerPoint (.pptx) gratis y sin subirlo a ningún servidor: la conversión ocurre en tu propio dispositivo.">
+<meta name="theme-color" content="#0f766e">
+<!-- Política de seguridad: solo recursos del propio sitio. Sin scripts
+     externos, sin rastreo, sin analíticas. (Las cabeceras de vercel.json
+     aplican la misma política; esta meta es el respaldo.) -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; worker-src 'self' blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="stylesheet" href="./styles.css">
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<div id="srStatus" class="sr-only" aria-live="polite"></div>
+<header class="site">
+  <nav aria-label="Herramientas">
+    <a href="./index.html" aria-current="page">Convertidor</a>
+    <a href="./excel.html">PDF a Excel</a>
+    <a href="./word.html">PDF a Word</a>
+    <a href="./pptx.html">PDF a PowerPoint</a>
+    <a href="./privacy.html">Privacidad</a>
+  </nav>
+  <h1>Convertidor PDF a Word, Excel y PowerPoint</h1>
+  <p class="sub">Gratis, sin cuentas y sin subir tu archivo a ningún servidor: la conversión ocurre en tu propio dispositivo. Tu PDF no sale de tu computadora ni de tu celular.</p>
+</header>
+
+<main>
+  <section class="card" aria-labelledby="titulo-subir">
+    <h2 id="titulo-subir">1. Elige tu PDF</h2>
+    <div id="drop" class="drop" tabindex="0" role="button" aria-label="Elegir un archivo PDF. También puedes arrastrarlo aquí.">
+      <p><strong>Arrastra tu PDF aquí</strong> o <button id="pickBtn" type="button">elige un archivo</button></p>
+      <p class="hint">Puedes elegir varios archivos a la vez. Acepta solo PDF.</p>
+      <p class="hint" id="deviceNote"></p>
+      <input id="fileInput" type="file" accept="application/pdf,.pdf" multiple hidden>
+    </div>
+    <ul id="fileList" aria-label="Archivos elegidos"></ul>
+    <p id="engineStatus" class="status">Comprobando el motor de conversión…</p>
+    <p id="serverStatus" class="status" hidden></p>
+  </section>
+
+  <section class="card" id="options" aria-labelledby="titulo-opciones" hidden>
+    <h2 id="titulo-opciones">2. Elige el destino y las opciones</h2>
+    <label class="field">Destino
+      <select id="target">
+        <option value="excel">Excel (.xlsx)</option>
+        <option value="word">Word (.docx)</option>
+        <option value="pptx">PowerPoint (.pptx)</option>
+      </select>
+    </label>
+    <div id="excelOptions">
+      <label class="field">Diseño del Excel
+        <select id="excelLayout">
+          <option value="pages">Una hoja por página del PDF</option>
+          <option value="continuous">Una sola hoja continua con todo el documento</option>
+          <option value="per-table">Una hoja por cada tabla detectada</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" id="mergeBook"> Unir varios PDF en un solo libro (una hoja por archivo)</label>
+      <p class="hint" id="mergeHint"></p>
+    </div>
+    <fieldset class="card" style="margin:12px 0">
+      <legend><strong>Rango de páginas</strong></legend>
+      <div class="range-row">
+        <label class="field">Desde la página <input id="pageFrom" type="number" min="1" value="1"></label>
+        <label class="field">Hasta la página <input id="pageTo" type="number" min="1" value="1"></label>
+      </div>
+      <p class="hint" id="rangeHint"></p>
+    </fieldset>
+    <button id="convertBtn" type="button" disabled>Convertir</button>
+  </section>
+
+  <div id="progress" class="progress" hidden>
+    <progress id="barFill" class="bar" max="100" value="0" aria-label="Progreso de la conversión"></progress>
+    <p id="progressText">En cola…</p>
+  </div>
+  <div id="error" class="error" role="alert" hidden></div>
+  <div id="quality" class="quality" hidden></div>
+
+  <section class="card" id="preview" aria-labelledby="titulo-vista" hidden>
+    <h2 id="titulo-vista">Vista previa: original y resultado, lado a lado</h2>
+    <div class="preview-grid">
+      <div class="preview-pane">
+        <h3>Tu PDF original</h3>
+        <p id="previewPageLabel" class="hint"></p>
+        <canvas id="previewPdf" aria-label="Vista previa de la página del PDF"></canvas>
+        <p>
+          <button id="prevPage" type="button" class="secondary">← Página anterior</button>
+          <button id="nextPage" type="button" class="secondary">Página siguiente →</button>
+        </p>
+      </div>
+      <div class="preview-pane">
+        <h3>Resultado de la conversión</h3>
+        <div id="previewResult"><p class="hint">Aquí verás el resultado cuando termine la conversión.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" id="corrector" aria-labelledby="titulo-corrector" hidden>
+    <h2 id="titulo-corrector">Revisa las celdas dudosas antes de descargar</h2>
+    <p id="doubtfulCount"></p>
+    <p class="hint">Son celdas que el lector de escaneados (OCR) no leyó con seguridad. Si un valor está mal, corrígelo aquí: la corrección sale en el archivo descargado.</p>
+    <ul id="doubtfulList"></ul>
+  </section>
+
+  <section class="card" id="downloadBox" aria-labelledby="titulo-descarga" hidden>
+    <h2 id="titulo-descarga">3. Descarga tu archivo</h2>
+    <div id="downloadList"></div>
+  </section>
+
+  <section class="card" aria-labelledby="titulo-ayuda">
+    <h2 id="titulo-ayuda">¿Algo salió mal?</h2>
+    <p>Si la conversión falla o el resultado sale mal, ayúdanos a arreglarlo. El informe técnico <strong>no contiene texto ni cifras de tu documento</strong>: solo versión, navegador, dispositivo aproximado, errores y tiempos.</p>
+    <p>
+      <button id="copyReport" type="button" class="secondary">Copiar informe técnico</button>
+      <a id="issueLink" class="download secondary" href="https://github.com/Joel06777/pdf-converter/issues/new" target="_blank" rel="noopener">Reportar una incidencia en GitHub</a>
+    </p>
+  </section>
+
+  <section class="card faq" aria-labelledby="titulo-faq">
+    <h2 id="titulo-faq">Preguntas frecuentes</h2>
+    <details><summary>¿Mi PDF se sube a algún servidor?</summary>
+      <p>No. La conversión ocurre en tu propio dispositivo, en el navegador. El archivo no sale de tu computadora ni de tu celular. Solo si el dueño activa el servidor opcional (y solo para documentos que el navegador no pueda resolver) se enviaría algo, y la página te avisaría antes. Lee la <a href="./privacy.html">política de privacidad</a>.</p></details>
+    <details><summary>¿Cuánto cuesta?</summary>
+      <p>Nada. Es gratis y no necesitas cuenta, correo ni tarjeta.</p></details>
+    <details><summary>¿Qué tamaño de PDF admite?</summary>
+      <p>Depende de tu dispositivo: la página te dice el límite recomendado al elegir el archivo. En computadoras normales, hasta 50 MB y 200 páginas; en celulares con poca memoria, menos. Si tu PDF es muy grande, convierte solo un rango de páginas.</p></details>
+    <details><summary>¿Funciona con PDFs escaneados (fotos de documentos)?</summary>
+      <p>Sí, si el motor tiene OCR: lee el texto de la imagen. Las celdas que no se lean con seguridad se marcan en amarillo y puedes corregirlas antes de descargar. Los escaneos borrosos o manuscritos salen peor: revisa siempre el resultado.</p></details>
+    <details><summary>¿Puedo convertir varios PDF a la vez?</summary>
+      <p>Sí: elige varios archivos y descarga cada resultado por separado, todos juntos en un ZIP, o —solo con destino Excel— unidos en un solo libro.</p></details>
+    <details><summary>¿Dónde está el código fuente?</summary>
+      <p>Es software libre (AGPL-3.0). El código está en <a href="https://github.com/Joel06777/pdf-converter">github.com/Joel06777/pdf-converter</a>.</p></details>
+  </section>
+</main>
+
+<footer class="site">
+  <nav aria-label="Enlaces del pie">
+    <a href="https://github.com/Joel06777/pdf-converter">Código fuente</a>
+    <a href="./privacy.html">Política de privacidad</a>
+    <a href="https://github.com/Joel06777/pdf-converter/issues/new">Reportar una incidencia</a>
+  </nav>
+  <p>Convertidor PDF a Word, Excel y PowerPoint. Software libre bajo licencia AGPL-3.0. El archivo no sale de tu dispositivo.</p>
+</footer>
+
+<script src="./config.js"></script>
+<script src="./engine.js"></script>
+<script src="./writers.js"></script>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
