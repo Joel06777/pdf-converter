@@ -38,6 +38,8 @@
     results: [],         // [{ name, blob, quality, ocr_warning }]
     timings: {},
     errors: [],
+    embedded: false, // true cuando viene incrustado en Pdfaria (?target=)
+    plan: "free",    // plan de Pdfaria cuando viene incrustado: free | premium
   };
 
   /* ---------- Utilidades ---------- */
@@ -73,6 +75,26 @@
     return parts.join(" · ");
   }
 
+  /* ---------- Límite del plan de Pdfaria (solo incrustado) ----------
+     Gratis: 4 conversiones al día y 25 MB por archivo.
+     Premium: conversiones ilimitadas y 500 MB por archivo.
+     Se cuenta en este origen (localStorage), un contador por día. */
+  function quotaKey() {
+    var d = new Date();
+    var day = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    return "pdfconv-quota-" + day;
+  }
+  function quotaUsed() {
+    if (!state.embedded || state.plan === "premium") return 0;
+    try { return parseInt(localStorage.getItem(quotaKey()) || "0", 10) || 0; }
+    catch (e) { return 0; }
+  }
+  function quotaConsume() {
+    if (!state.embedded || state.plan === "premium") return;
+    try { localStorage.setItem(quotaKey(), String(quotaUsed() + 1)); }
+    catch (e) { /* sin almacenamiento: no se cuenta */ }
+  }
+
   /* ---------- Carga diferida del motor ---------- */
   async function ensureEngine() {
     if (state.engine) return state.engine;
@@ -80,9 +102,20 @@
     state.engineState = "loading";
     setProgress(0.05, "Cargando el motor de conversión…");
     try {
-      state.engine = await window.PdfConverterEngineLoader.loadEngine(function (f, m) {
-        setProgress(0.05 + f * 0.85, m || "Cargando el motor…");
-      });
+      state.engine = await Promise.race([
+        window.PdfConverterEngineLoader.loadEngine(function (f, m) {
+          setProgress(0.05 + f * 0.85, m || "Cargando el motor…");
+        }),
+        /* Seguridad: la carga del motor nunca puede quedarse colgada para
+           siempre; si tarda más de 2 minutos, se avisa y se reintenta. */
+        new Promise(function (_, reject) {
+          setTimeout(function () {
+            var e = new Error("El motor tardó demasiado en cargar. Comprueba tu conexión, recarga la página y vuelve a intentarlo.");
+            e.code = "ENGINE_TIMEOUT";
+            reject(e);
+          }, 120000);
+        }),
+      ]);
       state.engineState = "ready";
       setProgress(1, "Motor listo.");
       return state.engine;
@@ -282,7 +315,14 @@
 
   async function convertAll() {
     if (state.converting) return;
-    hide($("error")); hide($("quality")); hide($("downloadBox"));
+    hide($("error")); hide($("quotaUpsell")); hide($("quality")); hide($("downloadBox"));
+    if (state.embedded && state.plan !== "premium" && quotaUsed() >= 4) {
+      show($("error"), "Llegaste a las 4 conversiones gratis de hoy en Pdfaria.");
+      var up = $("quotaUpsell");
+      if (up) up.hidden = false;
+      logError("QUOTA", "Límite de 4 conversiones diarias del plan gratis.");
+      return;
+    }
     state.results = [];
     state.converting = true;
     $("convertBtn").disabled = true;
@@ -348,6 +388,7 @@
       state.results = outputs;
       state.timings.totalMs = Math.round(performance.now() - t0);
       showResults(outputs);
+      quotaConsume();
       setProgress(1, "Listo.");
     } catch (err) {
       state.converting = false;
@@ -525,7 +566,23 @@
   function init() {
     var params = new URLSearchParams(location.search);
     var target = params.get("target");
-    if (target && ["excel", "word", "pptx"].indexOf(target) >= 0) $("target").value = target;
+    if (target && ["excel", "word", "pptx"].indexOf(target) >= 0) {
+      $("target").value = target;
+      /* Destino fijo cuando viene de Pdfaria: solo esa opción. */
+      var sel = $("target");
+      for (var i = sel.options.length - 1; i >= 0; i--) {
+        if (sel.options[i].value !== target) sel.remove(i);
+      }
+      $("excelOptions").hidden = target !== "excel";
+      state.embedded = true;
+    }
+    /* Plan de Pdfaria cuando viene incrustado (?plan=free|premium). */
+    var plan = params.get("plan");
+    state.plan = plan === "premium" ? "premium" : "free";
+    if (state.embedded) {
+      /* El tamaño máximo sigue el plan de Pdfaria, no el del dispositivo. */
+      device.maxMB = state.plan === "premium" ? 500 : 25;
+    }
 
     $("deviceNote").textContent = "Tu dispositivo: " + deviceNote() + ".";
     updateEngineStatus();
@@ -567,22 +624,6 @@
       renderPreviewPage(item, previewIndex);
     });
 
-    var copyBtn = $("copyReport");
-    if (copyBtn) copyBtn.addEventListener("click", async function () {
-      try {
-        await navigator.clipboard.writeText(technicalReport());
-        copyBtn.textContent = "Informe copiado ✓";
-        setTimeout(function () { copyBtn.textContent = "Copiar informe técnico"; }, 2500);
-      } catch (err) {
-        var ta = el("textarea");
-        ta.value = technicalReport();
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
-        copyBtn.textContent = "Informe copiado ✓";
-      }
-    });
     var issueLink = $("issueLink");
     if (issueLink) issueLink.addEventListener("click", function () { issueLink.href = issueUrl(); });
 

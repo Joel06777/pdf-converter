@@ -9,7 +9,7 @@
 <!-- Política de seguridad: solo recursos del propio sitio. Sin scripts
      externos, sin rastreo, sin analíticas. (Las cabeceras de vercel.json
      aplican la misma política; esta meta es el respaldo.) -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; worker-src 'self' blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; worker-src 'self' blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="stylesheet" href="./styles.css">
 <link rel="icon" href="./favicon.svg" type="image/svg+xml">
@@ -78,6 +78,7 @@
     <p id="progressText">En cola…</p>
   </div>
   <div id="error" class="error" role="alert" hidden></div>
+  <p id="quotaUpsell" class="error" hidden>Llegaste a las 4 conversiones gratis de hoy. <a href="https://pdfaria.vercel.app/precios">El plan Premium de Pdfaria</a> te da conversiones ilimitadas.</p>
   <div id="quality" class="quality" hidden></div>
 
   <section class="card" id="preview" aria-labelledby="titulo-vista" hidden>
@@ -113,10 +114,8 @@
 
   <section class="card" aria-labelledby="titulo-ayuda">
     <h2 id="titulo-ayuda">¿Algo salió mal?</h2>
-    <p>Si la conversión falla o el resultado sale mal, ayúdanos a arreglarlo. El informe técnico <strong>no contiene texto ni cifras de tu documento</strong>: solo versión, navegador, dispositivo aproximado, errores y tiempos.</p>
     <p>
-      <button id="copyReport" type="button" class="secondary">Copiar informe técnico</button>
-      <a id="issueLink" class="download secondary" href="https://github.com/Joel06777/pdf-converter/issues/new" target="_blank" rel="noopener">Reportar una incidencia en GitHub</a>
+      <a id="issueLink" class="download" href="https://github.com/Joel06777/pdf-converter/issues/new" target="_blank" rel="noopener">Sí, salió algo mal</a>
     </p>
   </section>
 
@@ -125,15 +124,13 @@
     <details><summary>¿Mi PDF se sube a algún servidor?</summary>
       <p>No. La conversión ocurre en tu propio dispositivo, en el navegador. El archivo no sale de tu computadora ni de tu celular. Solo si el dueño activa el servidor opcional (y solo para documentos que el navegador no pueda resolver) se enviaría algo, y la página te avisaría antes. Lee la <a href="./privacy.html">política de privacidad</a>.</p></details>
     <details><summary>¿Cuánto cuesta?</summary>
-      <p>Nada. Es gratis y no necesitas cuenta, correo ni tarjeta.</p></details>
+      <p>En Pdfaria, gratis hasta 4 conversiones al día. Si necesitas más, el <a href="https://pdfaria.vercel.app/precios">plan Premium de Pdfaria</a> te da conversiones ilimitadas.</p></details>
     <details><summary>¿Qué tamaño de PDF admite?</summary>
-      <p>Depende de tu dispositivo: la página te dice el límite recomendado al elegir el archivo. En computadoras normales, hasta 50 MB y 200 páginas; en celulares con poca memoria, menos. Si tu PDF es muy grande, convierte solo un rango de páginas.</p></details>
+      <p>En Pdfaria, el plan gratis admite archivos de hasta 25 MB y el plan Premium hasta 500 MB. Si tu PDF es muy grande, convierte solo un rango de páginas.</p></details>
     <details><summary>¿Funciona con PDFs escaneados (fotos de documentos)?</summary>
       <p>Sí, si el motor tiene OCR: lee el texto de la imagen. Las celdas que no se lean con seguridad se marcan en amarillo y puedes corregirlas antes de descargar. Los escaneos borrosos o manuscritos salen peor: revisa siempre el resultado.</p></details>
     <details><summary>¿Puedo convertir varios PDF a la vez?</summary>
       <p>Sí: elige varios archivos y descarga cada resultado por separado, todos juntos en un ZIP, o —solo con destino Excel— unidos en un solo libro.</p></details>
-    <details><summary>¿Dónde está el código fuente?</summary>
-      <p>Es software libre (AGPL-3.0). El código está en <a href="https://github.com/Joel06777/pdf-converter">github.com/Joel06777/pdf-converter</a>.</p></details>
   </section>
 </main>
 
