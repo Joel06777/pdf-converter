@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Prueba de privacidad — conversión en el navegador</title>
+</head>
+<body>
+<h1>Conversión en el navegador</h1>
+<p id="status">cargando motor…</p>
+<p id="result"></p>
+<script type="module">
+// Usa el worker REAL empaquetado (web/engine/dist/worker.js), sin stubs:
+// el motor completo (MuPDF, ExcelJS, docx, pptxgenjs) corre en el worker.
+const worker = new Worker("/web/engine/dist/worker.js", { type: "module" });
+const pending = new Map();
+let nextId = 1;
+
+worker.onmessage = (e) => {
+  const msg = e.data ?? {};
+  if (msg.type === "ready") {
+    const p = pending.get(0);
+    if (p) { pending.delete(0); p.resolve(); }
+    return;
+  }
+  const p = msg.id != null ? pending.get(msg.id) : null;
+  if (!p) {
+    // Error sin id (por ejemplo, en "init"): mostrarlo, no tragarlo.
+    if (msg.type === "error") {
+      document.getElementById("status").textContent = `error: ${msg.error}`;
+    }
+    return;
+  }
+  if (msg.type === "progress") return; // el progreso no resuelve la promesa
+  pending.delete(msg.id);
+  if (msg.type === "error") p.reject(new Error(msg.error));
+  else p.resolve(msg);
+};
+
+function callWorker(type, payload) {
+  return new Promise((resolve, reject) => {
+    const id = nextId++;
+    pending.set(id, { resolve, reject });
+    worker.postMessage({ type, id, ...payload });
+  });
+}
+
+window.__convert = async (bytes, target) => {
+  const out = await callWorker("convert", { pdf: bytes.buffer, target, options: { ocr: false } });
+  return { size: out.buffer.byteLength, filename: out.filename };
+};
+
+const status = document.getElementById("status");
+const result = document.getElementById("result");
+
+try {
+  await new Promise((resolve, reject) => {
+    pending.set(0, { resolve, reject });
+    worker.postMessage({ type: "init", mupdfUrl: "/web/engine/vendor/mupdf/mupdf.js" });
+  });
+  window.__engineReady = true;
+  status.textContent = "motor listo";
+} catch (err) {
+  status.textContent = `error: ${err.message}`;
+}
+
+window.__convertAll = async () => {
+  const res = await fetch("/tests/fixtures/factura.pdf");
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const out = {};
+  for (const target of ["excel", "word", "pptx"]) {
+    out[target] = await window.__convert(bytes, target);
+  }
+  result.textContent = JSON.stringify(out);
+  status.textContent = "terminado";
+  return out;
+};
+</script>
+</body>
+</html>
