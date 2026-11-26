@@ -4,7 +4,7 @@
    motor (web/engine/) también, porque es código propio del mismo sitio.
    Los datos de idioma del OCR y los archivos del usuario NUNCA se
    guardan en caché: no son parte de la app. */
-var CACHE_NAME = "pdf-converter-v1";
+var CACHE_NAME = "pdf-converter-v2";
 var APP_SHELL = [
   "./",
   "./index.html",
@@ -30,8 +30,13 @@ var APP_SHELL = [
 self.addEventListener("install", function (event) {
   event.waitUntil(
     caches.open(CACHE_NAME).then(function (cache) {
-      return cache.addAll(APP_SHELL);
-    })
+        /* `reload` obliga a bajar los archivos de la red: sin esto la
+           instalación podría guardar la copia vieja que el navegador
+           tenga en su caché HTTP y el cambio no llegaría nunca. */
+        return Promise.all(APP_SHELL.map(function (u) {
+          return cache.add(new Request(u, { cache: "reload" }));
+        }));
+      })
   );
   self.skipWaiting();
 });
