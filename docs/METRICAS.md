@@ -5,9 +5,12 @@ y con las pruebas de `tests/test_converters.py` y `tests/test_fixtures.py`.
 
 ## Entorno de medición
 - VM Linux, Python 3.12.3, PyMuPDF 2.2, Tesseract 5.3.4 (`spa+eng`), OCRmyPDF 15.2.0.
-- Pruebas: **69 passed, 0 failed** (`pytest -q`, 26 nov 2026, 112 s): 44 de la
-  base + 20 nuevas de esta tanda (13 de fixtures, 4 de totales/moneda y 3 de
-  `missing_sample`) + 5 de `tests/test_capacidad.py` (otro agente, en paralelo).
+- Pruebas: **119 passed, 0 failed, 2 warnings** (`pytest -q`, 26 nov 2026,
+  171 s, re-medido por el coordinador): 69 de la base + 50 nuevas de la
+  ronda del navegador primero (42 estructurales QR + 3 renderizadas +
+  3 de rendimiento + 2 de Nº). Los 2 fallos que aparecían sin Tesseract
+  instalado eran tests OCR; con Tesseract 5.3.4 + OCRmyPDF 15.2.0
+  instalados, todo pasa.
 - Los tiempos son de una sola ejecución en este entorno y varían entre corridas;
   sirven como orden de magnitud, no como garantía.
 
@@ -39,11 +42,19 @@ sean comparables con las publicadas antes.
 
 | Caso | Cifras antes → después | Texto solo antes → después | Tokens (texto+cifras) antes → después |
 |---|---|---|---|
-| estado_ingresos_octubre_2026.pdf escaneado a 200 dpi | 100 % → **100 %** | 88,6 % → 88,6 % | 90,3 % → 90,3 % |
-| factura.pdf escaneada a 200 dpi | 100 % → **100 %** | 83,3 % → **97,9 %** | 87,1 % → **98,4 %** |
-| factura.pdf como foto inclinada 3° | 100 % → **100 %** | 81,2 % → **95,8 %** | 85,5 % → **96,8 %** |
-| factura con sello + marca de agua, escaneada en color (nuevo) | — → **100 %** | — → **97,9 %** | — → **98,4 %** |
-| foto de celular con perspectiva + 2° (nuevo) | — → **100 %** | — → **95,8 %** | — → **96,8 %** |
+| estado_ingresos_octubre_2026.pdf escaneado a 200 dpi | 100 % → **100 %** | 88,6 % → **88,9 %** | 90,3 % → 90,3 % |
+| factura.pdf escaneada a 200 dpi | 100 % → **100 %** | 83,3 % → **100,0 %** | 87,1 % → **100,0 %** |
+| factura.pdf como foto inclinada 3° | 100 % → **100 %** | 81,2 % → **97,9 %** | 85,5 % → 96,8 % |
+| factura con sello + marca de agua, escaneada en color (nuevo) | — → **100 %** | — → **100,0 %** | — → **100,0 %** |
+| foto de celular con perspectiva + 2° (nuevo) | — → **100 %** | — → **97,9 %** | — → 96,8 % |
+
+Los valores de «Texto solo» después son los medidos tras el arreglo del
+símbolo `Nº` en OCR (26 nov 2026, `app/converters/extract.py`,
+`_fix_ocr_numero()`): el escaneo plano de la factura pasó de 97,9 % a
+100,0 % (48/48 tokens) porque el único error que quedaba era el `Nº`
+leído como `N?`. La columna «Tokens» conserva los valores medidos antes
+del arreglo salvo los dos casos que quedaron en 100 % en todo; no se
+re-midió entera tras el arreglo.
 
 Las cifras (lo crítico en documentos contables) se recuperan al 100 % en los
 cinco casos. El texto que sigue perdiéndose es casi todo el símbolo `Nº`
@@ -105,11 +116,18 @@ Probado y NO adoptado (medido, sin mejora o con empeoramiento):
 
 | Fixture | Excel | Word | PPTX |
 |---|---|---|---|
-| estado_ingresos_octubre_2026.pdf | 0,35 s | 4,58 s | 0,65 s |
+| estado_ingresos_octubre_2026.pdf | 0,35 s | 1,18 s | 0,65 s |
 | factura.pdf | 0,05 s | 0,18 s | 0,06 s |
-| estado_cuenta_multipagina.pdf | 0,11 s | 0,70 s | 0,17 s |
+| estado_cuenta_multipagina.pdf | 0,11 s | 0,43 s | 0,17 s |
 | escaneado.pdf (OCR) | 3,94 s | 3,70 s | 4,12 s |
 | foto_inclinada.pdf (OCR + enderezado) | 5,63 s | 5,22 s | 5,40 s |
+
+Los tiempos de Word son los medidos tras el arreglo de la lentitud de
+Word (26 nov 2026, `scripts/measure_word.py`, mejor de 3): la causa era
+que `table.cell()` de python-docx reconstruye la lista completa de celdas
+en cada llamada; ahora se usa un índice propio de celdas. Referencia
+4,27 s → 1,18 s; tabla grande de 50 filas 1,35 s → 0,36 s; estado de
+cuenta de 6 páginas 1,06 s → 0,62 s; estado multipágina 0,67 s → 0,43 s.
 
 El OCR domina el tiempo (~4–6 s por página). Word en el documento de
 referencia tarda más (~4,6 s) por la reconstrucción de la tabla con
@@ -167,3 +185,174 @@ conversiones a la vez, recomendado para Oracle). La RSS del proceso
 creció de 114 MB a 1,2 GB sin bajar al drenar: por eso el worker se
 recicla cada 50 trabajos (`max-tasks-per-child=50`) y tiene límite de
 memoria de 1g.
+
+---
+
+# Navegador (web/) — metodología y mediciones
+
+## Metodología
+
+- **Qué se mide:** tiempo desde que el usuario pulsa «Convertir»
+  hasta que el archivo está listo para descargar, por destino y por
+  fixture; tamaño de descarga en la primera visita; memoria usada
+  por el motor (cuando el navegador la expone); y fidelidad
+  (`text_coverage`, `number_coverage`) contra los mismos 12 fixtures
+  del servidor.
+- **Cómo se mide:** en el navegador, con `performance.now()` en
+  `web/app.js` (tiempos) y con la pestaña de red de las herramientas
+  de desarrollo (tamaños). Los tiempos se miden 3 veces y se anota
+  la mediana. Los fixtures son los de `tests/fixtures/` (servidor)
+  y los de `web/tests/fixtures/` (casos hostiles).
+- **Emulaciones:** los celulares de gama media y baja se emulan con
+  las herramientas de desarrollo del navegador (limitación de CPU y
+  de red) y **se avisa de que son emulaciones**: un celular real
+  rinde distinto. Cuando se mida en un celular real, se anota el
+  modelo y se sustituye la fila.
+- **Regla:** si no se midió, la celda dice **«sin medir»**. No se
+  inventa ningún número.
+
+## Tamaños de descarga (medidos el 26 nov 2026)
+
+Medido con Node (`zlib`, Brotli calidad 11 y gzip nivel 9) sobre los
+archivos que baja el navegador en la primera visita. Los `.traineddata.gz`
+ya vienen comprimidos y no bajan más. Vercel comprime con Brotli en
+tránsito, así que lo que paga el visitante es la columna Brotli.
+
+| Archivo | Crudo | Brotli | gzip |
+|---|---|---|---|
+| `web/engine/index.js` (adaptador) | 3,9 KB | 1,5 KB | 1,7 KB |
+| `web/engine/dist/worker.js` (motor sin MuPDF) | 2,04 MB | 0,38 MB | 0,50 MB |
+| `web/engine/vendor/mupdf/mupdf.js` | 0,10 MB | 0,02 MB | 0,02 MB |
+| `web/engine/vendor/mupdf/mupdf-wasm.js` | 0,03 MB | 0,01 MB | 0,01 MB |
+| `web/engine/vendor/mupdf/mupdf-wasm.wasm` | 9,93 MB | 3,44 MB | 4,54 MB |
+| **Núcleo sin OCR** | **12,10 MB** | **3,85 MB** | **5,07 MB** |
+| `dist/tesseract-core-lstm.js` + `.wasm` + `.wasm.js` + `tesseract-worker.min.js` | 6,62 MB | 1,91 MB | 2,46 MB |
+| `spa.traineddata.gz` + `eng.traineddata.gz` | 2,94 MB | 2,94 MB | 2,94 MB |
+| **OCR completo (adicional al núcleo)** | **9,56 MB** | **4,85 MB** | **5,40 MB** |
+| **Núcleo + OCR** | **21,66 MB** | **8,70 MB** | **10,47 MB** |
+| Web: `app.js` + `engine.js` + `writers.js` + `config.js` + `styles.css` + `index.html` | 0,06 MB | 0,02 MB | 0,03 MB |
+| Web `vendor/`: exceljs 4.4.0 + docx 9.16.0 + pptxgenjs 4.0.1 + fflate 0.8.2 + pdf.js 5.5.207 (+ worker) | 3,97 MB | 0,88 MB | 1,16 MB |
+| **Total primera visita sin OCR** | **16,13 MB** | **4,75 MB** | **6,26 MB** |
+| **Total primera visita con OCR** | **25,69 MB** | **9,60 MB** | **11,66 MB** |
+
+Capacidad en Vercel Hobby (100 GB/mes, sin contar visitas repetidas:
+el Service Worker guarda el motor tras la primera visita):
+
+| Caso | Descarga por visita nueva (Brotli) | Visitas nuevas/mes en 100 GB |
+|---|---|---|
+| Sin OCR (lo habitual) | 3,85 MB (núcleo) + 0,90 MB (web) = 4,75 MB | ~21.600 |
+| Con OCR (solo escaneados) | 8,70 MB + 0,90 MB = 9,60 MB | ~10.600 |
+
+Ojo: el OCR se descarga solo cuando el PDF no tiene texto, así que la
+mayoría de visitas pagan solo la fila sin OCR. La cifra de OCR cuenta
+los 4 archivos de Tesseract (`core-lstm.js`, `.wasm`, `.wasm.js`,
+`worker.min.js`) + los 2 datos de idioma; si el navegador no llega a
+pedir el `.wasm.js` (depende de cómo cargue el núcleo), la descarga
+real es menor. Eso se mide en la prueba de navegador con OCR, que
+queda pendiente.
+
+**Verificación de los escritores (26 nov 2026, Node con las
+librerías vendidas):** con un modelo de prueba, `writeExcel` (los
+3 diseños: por página, continuo, por tabla), `writeWord`,
+`writePptx` y el ZIP producen archivos válidos; el `.xlsx` se
+reabre con ExcelJS y la cifra queda como número (`150.5`, tipo
+`number`) y la celda dudosa con relleno amarillo (`FFFFF2CC`).
+Los tres archivos se abren en LibreOffice y se convierten a PDF
+sin errores.
+
+**Verificación del motor en el navegador (26 nov 2026, Playwright):**
+`web/engine/index.js` + `dist/worker.js` existen tras `npm run build`
+en `web/engine/` (Vite 8, MIT). La web convierte de verdad:
+factura → Excel en Chromium con calidad texto 100 % / cifras 100 %
+y TOTAL 335 en el `.xlsx`; factura → Word en Pixel 7. Detalle en
+`tests/browser/README.md`.
+
+## Tiempos de conversión en el navegador
+
+Medido el 26 nov 2026 con Playwright en la VM de trabajo (una sola
+ejecución por caso, no mediana de 3; sirve como orden de magnitud).
+El tiempo es desde que se pulsa «Convertir» hasta que el archivo está
+listo para descargar, con el motor ya cargado en la primera conversión
+de la sesión (la carga del motor —worker 2,04 MB + WASM 9,93 MB—
+ocurre una sola vez por visita).
+
+| Dispositivo | Fixture | Excel | Word | PPTX |
+|---|---|---|---|---|
+| PC normal (Chromium, VM) | factura.pdf (1 pág.) | 5,6 s (web real) | sin medir | sin medir |
+| Celular gama media (Pixel 7 emulado) | factura.pdf (1 pág.) | sin medir | 5,0 s (web real) | sin medir |
+| Celular gama baja (Pixel 7 + CPU 4x) | factura.pdf (1 pág.) | sin medir | sin medir | sin medir |
+
+Conversión a los 3 destinos seguidos con el worker directo
+(`tests/browser/privacy.spec.js`, factura.pdf, 1 pág.):
+
+| Dispositivo | Tiempo total (Excel + Word + PPTX) |
+|---|---|
+| PC normal (Chromium, VM) | 2,4 s |
+| Celular gama baja (Pixel 7 + CPU 4x) | 4,7 s |
+| PC normal (Firefox) | 3,5 s |
+
+Sin medir todavía: estado de cuenta de varias páginas en el navegador,
+PDF de 10 páginas a Excel (objetivo: pocos segundos en PC normal),
+tiempos con OCR en el navegador, y cualquier medida en un celular real
+o en WebKit (WebKit no se ejecuta en esta VM; en CI sí).
+
+Los tiempos del servidor (arriba en este documento) **no** se trasladan
+al navegador: el motor del navegador es otro código (MuPDF.js +
+tesseract.js) y hay que medirlo aparte, en cada dispositivo.
+
+## Fidelidad en el navegador
+
+| Fixture | Excel texto/cifras | Word texto/cifras | PPTX texto/cifras |
+|---|---|---|---|
+| factura.pdf (web real, Chromium) | 1,0 / 1,0 (calidad mostrada por la web) | sin medir | sin medir |
+| factura.pdf (web real, Pixel 7) | sin medir | 1,0 / 1,0 (el texto llega al .docx) | sin medir |
+| 10 fixtures nativos × 3 destinos (motor en Node, `matrix.mjs`) | 1,0 / 1,0 | 1,0 / 1,0 | 1,0 / 1,0 |
+
+### Paridad contra el oráculo Python (42 PDFs, 26 nov 2026)
+
+`scripts/parity.py --ocr off --visual`: 252 filas, 0 errores.
+Resultados en `scripts/parity/parity_results.json` y `.csv`; resumen
+completo en `docs/INFORME_FINAL.md` §3.
+
+| Destino | Navegador texto / cifras (33 nativos) | Celdas (19 fixtures, 858 celdas) |
+|---|---|---|
+| Excel | 0,9982 / 1,0 | 0,9463 (825/858), idéntico a Python |
+| Word | 0,9982 / 1,0 | **1,0 (858/858)**, igual que Python (era 0,829 antes de la decisión grid/flow por cifras aisladas) |
+| PowerPoint | 0,9982 / 1,0 | 1,0 (858/858), igual que Python |
+
+El único texto que falta es en `estado_ingresos_octubre_2026.pdf`
+(0,9406). Imágenes en Word del navegador (dibujos `<a:blip>`):
+escaneos 1/1 y 2/2 (sin duplicar); en Excel el fondo del escaneo no
+se copia a propósito (el texto OCR ya está en las celdas); en PPTX
+1/1 y 2/2, igual que Python. Tiempos medios por conversión en Node:
+Excel 1,69 s, PPTX 1,76 s, Word 1,85 s (corrida final, con pytest en
+paralelo en la misma VM; sin carga paralela: 1,08 / 1,00 / 1,14 s).
+
+La paridad completa contra el oráculo Python (42 PDFs del conjunto de
+oro, con celdas, rellenos, bordes, combinadas, imágenes y métrica visual)
+está en `scripts/parity/parity_results.json` y se resume en
+`docs/INFORME_FINAL.md`.
+
+## Casos hostiles (`web/tests/`)
+
+| Caso | Resultado |
+|---|---|
+| 12 casos de `web/tests/fixtures/` | sin medir (ver `web/tests/hostile-cases.md`) |
+
+## Pruebas en navegador real (Playwright)
+
+Playwright 1.65.1 (Apache-2.0). Medido el 26 nov 2026 en la VM de
+trabajo (detalle y cómo ejecutar: `tests/browser/README.md`):
+
+| Prueba | Resultado |
+|---|---|
+| convert.spec.js Chromium: factura → Excel | pasa en 5,6 s; calidad texto 100 % / cifras 100 %; TOTAL 335 en el .xlsx; 0 peticiones fuera del origen local |
+| convert.spec.js móvil Pixel 7: factura → Word | pasa en 5,0 s; «335» en el .docx; 0 peticiones fuera del origen local |
+| privacy.spec.js Chromium: 3 destinos | pasa en 2,4 s; 6 peticiones estáticas locales, 0 externas |
+| privacy.spec.js móvil CPU 4x: 3 destinos | pasa en 4,7 s; 0 peticiones externas |
+| privacy.spec.js Firefox: 3 destinos | pasa en 3,5 s; 0 peticiones externas |
+| WebKit | sin medir en esta VM (sin dependencias del SO); en CI con `--with-deps` |
+
+Pendiente en el navegador real: conversión con OCR (escaneado),
+estado de cuenta de varias páginas, los 12 casos hostiles de
+`web/tests/` y el corrector de celdas dudosas con un escaneado real.
