@@ -173,6 +173,190 @@ def _render_only(src_doc: pymupdf.Document, path: Path, rotate: float = 0.0) -> 
     out.save(path)
 
 
+def factura_real_logo_sello(path: Path) -> None:
+    """Factura con logo dibujado, sello circular, subtotal, IVA 15% y total.
+
+    Cifras: artículos 100 + 150 + 85 = subtotal 335.00; IVA 15% = 50.25;
+    total 385.25 (aritmética consistente).
+    """
+    doc = pymupdf.open()
+    page = doc.new_page(width=W, height=H)
+    # Logo dibujado: rectángulo + círculo con las iniciales.
+    page.draw_rect(pymupdf.Rect(40, 28, 150, 72), color=(0.1, 0.3, 0.6), fill=(0.85, 0.9, 0.98), width=1.2)
+    page.draw_circle((62, 50), 14, color=(0.1, 0.3, 0.6), fill=(0.1, 0.3, 0.6), width=1)
+    _text(page, 56, 55, "FT", size=11, font="hebo", color=(1, 1, 1))
+    _text(page, 82, 47, "Ferretería", size=13, font="hebo", color=(0.1, 0.3, 0.6))
+    _text(page, 82, 64, "EL TORNILLO S.A.", size=11, font="hebo", color=(0.1, 0.3, 0.6))
+    _text(page, 40, 100, "FACTURA Nº 001-002-0001235", size=16, font="hebo")
+    _text(page, 40, 125, "RUC: 0993132977001", size=10)
+    _text(page, 40, 145, "Cliente: Asociación de Propietarios Punta Esmeralda", size=10)
+    _text(page, 40, 165, "Fecha: 20 de octubre de 2026", size=10)
+    rows = [
+        ["Descripción", "Cantidad", "Precio Unit.", "Total"],
+        ["Tornillos galvanizados", "100", "$ 1.00", "$ 100.00"],
+        ["Pintura blanca 1 galón", "5", "$ 30.00", "$ 150.00"],
+        ["Cable eléctrico 100 m", "1", "$ 85.00", "$ 85.00"],
+        ["SUBTOTAL", "", "", "$ 335.00"],
+        ["IVA 15%", "", "", "$ 50.25"],
+        ["TOTAL", "", "", "$ 385.25"],
+    ]
+    _table(page, 40, 200, [40, 300, 370, 460, 555], rows)
+    _text(page, 40, 400, "Gracias por su compra. Valores en dólares americanos.", size=9)
+    # Sello circular rojo (sin tapar la tabla): "PAGADO" + fecha.
+    page.draw_circle((470, 480), 48, color=(0.8, 0.1, 0.1), fill=None, width=2.5)
+    page.draw_circle((470, 480), 40, color=(0.8, 0.1, 0.1), fill=None, width=1)
+    _text(page, 440, 476, "PAGADO", size=13, font="hebo", color=(0.8, 0.1, 0.1))
+    _text(page, 438, 496, "20 OCT 2026", size=9, font="hebo", color=(0.8, 0.1, 0.1))
+    doc.save(path)
+
+
+def tabla_combinada_compleja(path: Path) -> None:
+    """Tabla con encabezado combinado (horizontal), categorías fusionadas
+    verticalmente y fila TOTAL. Totales: 100+100+150+170 = 520.00."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=W, height=H)
+    _text(page, 40, 50, "REPORTE DE VENTAS", size=14, font="hebo")
+    # Encabezado combinado: una sola línea centrada sobre todo el ancho.
+    rc = page.insert_textbox(pymupdf.Rect(40, 70, 555, 95), "VENTAS 2026",
+                             fontsize=13, fontname="hebo", align=1)
+    assert rc >= 0, "el encabezado combinado no cupo"
+    y = 120
+    # Rellenos que abarcan las filas de cada región (fusión vertical).
+    page.draw_rect(pymupdf.Rect(40, y + 22, 180, y + 66), color=(0.9, 0.95, 0.9), fill=(0.9, 0.95, 0.9))
+    page.draw_rect(pymupdf.Rect(40, y + 66, 180, y + 110), color=(0.95, 0.9, 0.9), fill=(0.95, 0.9, 0.9))
+    _table(page, 40, y, [40, 180, 330, 420, 480, 555],
+           [["Región", "Producto", "Cantidad", "Precio", "Total"],
+            ["Norte", "Tornillos", "100", "$ 1.00", "$ 100.00"],
+            ["", "Tuercas", "200", "$ 0.50", "$ 100.00"],
+            ["Sur", "Pintura", "5", "$ 30.00", "$ 150.00"],
+            ["", "Cable", "2", "$ 85.00", "$ 170.00"],
+            ["TOTAL", "", "", "", "$ 520.00"]], row_h=22)
+    _text(page, 40, y + 6 * 22 + 25, "Precios en dólares americanos.", size=9)
+    doc.save(path)
+
+
+def dos_columnas_tablas(path: Path) -> None:
+    """Dos columnas; cada una contiene una tabla pequeña con cifras.
+
+    Izquierda: gastos 20.00 + 35.50 + 45.00 = 100.50.
+    Derecha: ingresos 1200.00 + 300.00 + 45.50 = 1545.50.
+    """
+    doc = pymupdf.open()
+    page = doc.new_page(width=W, height=H)
+    _text(page, 40, 50, "RESUMEN DE ENERO 2026", size=14, font="hebo")
+    _table(page, 40, 100, [40, 150, 280],
+           [["Concepto", "Valor"],
+            ["Agua", "$ 20.00"],
+            ["Luz", "$ 35.50"],
+            ["Internet", "$ 45.00"],
+            ["TOTAL", "$ 100.50"]], row_h=20)
+    _table(page, 310, 100, [310, 430, 555],
+           [["Concepto", "Valor"],
+            ["Cuotas", "$ 1,200.00"],
+            ["Alquiler", "$ 300.00"],
+            ["Intereses", "$ 45.50"],
+            ["TOTAL", "$ 1,545.50"]], row_h=20)
+    doc.save(path)
+
+
+def _factura_con_sello_y_marca(path: Path) -> None:
+    """Factura nativa (= factura.pdf) con sello rojo y marca de agua diagonal
+    semitransparente. Es el original del que se genera escaneado_color_sello."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=W, height=H)
+    _text(page, 40, 50, "FACTURA Nº 001-002-0001234", size=16, font="hebo")
+    _text(page, 40, 75, "Ferretería El Tornillo S.A.", size=12, font="hebo")
+    _text(page, 40, 95, "RUC: 0993132977001", size=10)
+    _text(page, 40, 115, "Cliente: Asociación de Propietarios Punta Esmeralda", size=10)
+    _text(page, 40, 135, "Fecha: 15 de octubre de 2026", size=10)
+    rows = [
+        ["Descripción", "Cantidad", "Precio Unit.", "Total"],
+        ["Tornillos galvanizados", "100", "$ 0.50", "$ 50.00"],
+        ["Pintura blanca 1 galón", "5", "$ 25.00", "$ 125.00"],
+        ["Cable eléctrico 100 m", "2", "$ 80.00", "$ 160.00"],
+        ["TOTAL", "", "", "$ 335.00"],
+    ]
+    _table(page, 40, 170, [40, 300, 370, 460, 555], rows)
+    _text(page, 40, 320, "Gracias por su compra. Valores en dólares americanos.", size=9)
+    # Sello circular rojo sobre el margen inferior.
+    page.draw_circle((470, 420), 42, color=(0.8, 0.1, 0.1), fill=None, width=2.5)
+    _text(page, 440, 416, "PAGADO", size=13, font="hebo", color=(0.8, 0.1, 0.1))
+    _text(page, 438, 436, "15 OCT 2026", size=9, font="hebo", color=(0.8, 0.1, 0.1))
+    # Marca de agua diagonal: se dibuja sobre la imagen rasterizada (el
+    # texto nativo no admite rotación de 45° ni opacidad en PyMuPDF).
+    # Ver _render_only_con_marca_agua.
+    doc.save(path)
+
+
+def _render_only_con_marca_agua(src_doc: pymupdf.Document, path: Path) -> None:
+    """Escaneo en color (200 dpi) con marca de agua diagonal semitransparente.
+
+    La marca ("COPIA", rojo claro, 45°, alfa 70/255) se dibuja con Pillow
+    sobre la imagen ya rasterizada y cruza el texto de la factura.
+    """
+    from io import BytesIO
+
+    from PIL import Image, ImageDraw, ImageFont
+
+    page = src_doc[0]
+    pix = page.get_pixmap(dpi=200)
+    img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples).convert("RGBA")
+    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 150)
+    draw.text((img.width // 2 - 260, img.height // 2 - 75), "COPIA", font=font,
+              fill=(200, 60, 60, 70))
+    layer = layer.rotate(45, expand=False, resample=Image.BICUBIC)
+    img = Image.alpha_composite(img, layer).convert("RGB")
+    out = pymupdf.open()
+    new = out.new_page(width=page.rect.width, height=page.rect.height)
+    buf = BytesIO()
+    img.save(buf, "JPEG", quality=90)
+    new.insert_image(new.rect, stream=buf.getvalue())
+    out.save(path)
+
+
+def _perspective_coeffs(src_corners, dst_corners):
+    """Coeficientes de Pillow (PERSPECTIVE) que llevan cada esquina destino a su
+    esquina origen. Resuelto con NumPy (8 ecuaciones, 8 incógnitas)."""
+    import numpy as np
+
+    a = []
+    b = []
+    for (x, y), (u, v) in zip(dst_corners, src_corners):
+        a.append([x, y, 1, 0, 0, 0, -u * x, -u * y])
+        b.append(u)
+        a.append([0, 0, 0, x, y, 1, -v * x, -v * y])
+        b.append(v)
+    coeffs = np.linalg.solve(np.array(a, dtype=float), np.array(b, dtype=float))
+    return tuple(float(c) for c in coeffs)
+
+
+def _render_perspective(src_doc: pymupdf.Document, path: Path) -> None:
+    """Foto de celular: escaneo con transformación de perspectiva leve
+    (esquinas desplazadas) y una inclinación adicional de 2°."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    page = src_doc[0]
+    pix = page.get_pixmap(dpi=200)
+    img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    w, h = img.size
+    src = [(0, 0), (w, 0), (w, h), (0, h)]
+    dst = [(0.04 * w, 0.02 * h), (0.95 * w, 0.01 * h),
+           (0.97 * w, 0.96 * h), (0.01 * w, 0.98 * h)]
+    img = img.transform((w, h), Image.PERSPECTIVE,
+                        _perspective_coeffs(src, dst), resample=Image.BICUBIC)
+    img = img.rotate(2, expand=False, fillcolor="white", resample=Image.BICUBIC)
+    out = pymupdf.open()
+    new = out.new_page(width=page.rect.width, height=page.rect.height)
+    buf = BytesIO()
+    img.save(buf, "JPEG", quality=90)
+    new.insert_image(new.rect, stream=buf.getvalue())
+    out.save(path)
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     factura(OUT / "factura.pdf")
@@ -181,13 +365,21 @@ def main() -> None:
     celdas_combinadas(OUT / "celdas_combinadas.pdf")
     dos_columnas(OUT / "dos_columnas.pdf")
     acentos(OUT / "acentos.pdf")
+    factura_real_logo_sello(OUT / "factura_real_logo_sello.pdf")
+    tabla_combinada_compleja(OUT / "tabla_combinada_compleja.pdf")
+    dos_columnas_tablas(OUT / "dos_columnas_tablas.pdf")
     # Escaneados: se generan a partir de la factura (documento con cifras conocidas).
     tmp = pymupdf.open()
     factura(OUT / "_tmp_factura.pdf")
     src = pymupdf.open(OUT / "_tmp_factura.pdf")
     _render_only(src, OUT / "escaneado.pdf")
     _render_only(src, OUT / "foto_inclinada.pdf", rotate=3.0)
+    _factura_con_sello_y_marca(OUT / "_tmp_sello.pdf")
+    src_sello = pymupdf.open(OUT / "_tmp_sello.pdf")
+    _render_only_con_marca_agua(src_sello, OUT / "escaneado_color_sello.pdf")
+    _render_perspective(src, OUT / "foto_celular_perspectiva.pdf")
     (OUT / "_tmp_factura.pdf").unlink()
+    (OUT / "_tmp_sello.pdf").unlink()
     for p in sorted(OUT.glob("*.pdf")):
         print(p.name, p.stat().st_size, "bytes")
 
