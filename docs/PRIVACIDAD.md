@@ -7,12 +7,44 @@
 política en la web.** Es un marcador de posición: el repositorio no
 contiene ninguna dirección de contacto.
 
-> Esta política describe lo que hace **este servicio de conversión**
-> (el backend). La web que lo presenta corre en Vercel y solo reenvía el
-> archivo al backend: no añade seguimiento propio. Si la web añade algún
-> día analítica o cookies, habrá que actualizar esta política.
+> **Dos modos, dos políticas.** Esta política cubre los dos modos del
+> servicio:
+>
+> 1. **Modo navegador (por defecto, desde la web `web/`): el PDF no
+>    sale de tu dispositivo.** La conversión ocurre en tu navegador.
+>    No hay servidor, no se sube nada, no se guarda nada fuera de tu
+>    dispositivo. Todo lo de «En resumen» que habla del servidor
+>    aplica solo al modo 2.
+> 2. **Modo servidor opcional (solo si el dueño lo activa):** el PDF
+>    viaja al servidor propio y se procesa allí, con las reglas de
+>    borrado que se describen abajo. La página te avisa antes de
+>    enviar nada. Detalle en `docs/SERVIDOR_OPCIONAL.md`.
+>
+> Esta política describe lo que hace **este servicio de conversión**.
+> La web que lo presenta corre en Vercel y solo sirve los archivos
+> estáticos: no añade seguimiento propio ni reenvía tu archivo a
+> ningún sitio. Si la web añade algún día analítica o cookies, habrá
+> que actualizar esta política.
 
-## En resumen
+## En resumen (modo navegador, el que usa la web)
+
+- Solo tratamos **el PDF que subes y el archivo que resulta de
+  convertirlo**, y solo **dentro de tu propio dispositivo**.
+- **El archivo no sale de tu dispositivo.** No se sube a ningún
+  servidor, ni nuestro ni de terceros.
+- **No pedimos cuenta, ni nombre, ni correo.** No hay registro de
+  usuarios.
+- **No hay seguimiento**: sin analíticas de terceros, sin cookies de
+  seguimiento y sin publicidad. La página solo guarda en tu
+  dispositivo lo necesario para funcionar sin conexión tras la
+  primera visita (caché de la aplicación) y tus ajustes.
+- El **informe técnico** que puedes copiar para reportar una
+  incidencia **no contiene texto ni cifras de tu documento**: solo
+  versión, navegador, dispositivo aproximado, errores y tiempos.
+- **No vendemos ni compartimos tus documentos con nadie.** No se
+  envía nada a servicios externos de conversión.
+
+## En resumen (modo servidor opcional, solo si se activa)
 
 - Solo tratamos **el PDF que subes y el archivo que resulta de convertirlo**.
 - **No pedimos cuenta, ni nombre, ni correo.** No hay registro de usuarios.
@@ -27,7 +59,20 @@ contiene ninguna dirección de contacto.
 - **No hay seguimiento**: el backend no pone cookies de seguimiento ni
   usa analítica.
 
-## Qué datos se tratan
+## Qué datos se tratan (modo navegador)
+
+| Dato | Para qué | Dónde vive |
+|---|---|---|
+| El PDF que subes | Convertirlo al formato que elegiste (Excel, Word o PowerPoint) | Solo en la memoria de tu navegador, durante la conversión. No sale del dispositivo. |
+| El archivo convertido | Que puedas descargarlo | Solo en tu dispositivo, hasta que lo descargues o cierres la pestaña. |
+| El nombre del archivo | Mostrarlo en la página y ponerle nombre a la descarga | Solo en la página, en tu navegador. |
+| Informe técnico (si lo copias) | Ayudar a arreglar un fallo | Solo lo que tú copies y pegues: versión, navegador, dispositivo aproximado, errores y tiempos. Nunca texto ni cifras del documento. |
+
+**Lo que NO se recoge en modo navegador:** no hay cuentas,
+contraseñas, correos, nombres, números de teléfono, direcciones IP
+ni datos de pago. Nadie ve tu archivo: ni siquiera nosotros.
+
+## Qué datos se tratan (modo servidor opcional)
 
 | Dato | Para qué | Dónde vive |
 |---|---|---|
@@ -42,7 +87,7 @@ contiene ninguna dirección de contacto.
 números de teléfono ni datos de pago. El servicio no sabe quién eres: solo
 ve una IP y un archivo.
 
-## Cómo se borran tus archivos (comportamiento real del código)
+## Cómo se borran tus archivos (modo servidor opcional; comportamiento real del código)
 
 Esto no es una promesa genérica: es lo que hace el código
 (`app/processing.py`, `app/jobs.py`, `app/worker.py`):
@@ -83,16 +128,24 @@ ningún documento ni de ningún usuario.
   servidor hacia Google, Adobe ni ningún otro convertidor: se procesa con
   el motor propio (PyMuPDF, Tesseract/OCRmyPDF) instalado en el mismo
   servidor.
-- **Tránsito por Vercel:** la web reenvía tu PDF desde tu navegador al
-  backend pasando por una función serverless de Vercel
-  (`web-example/api/convert.js`). Vercel solo lo transporta; no lo guarda
-  como archivo ni lo convierte. El alojamiento del backend es Oracle Cloud
-  (el servidor donde corre el servicio, en la región elegida al crear la
-  cuenta).
+- **Tránsito por Vercel (solo modo servidor, flujo antiguo):** en el
+  flujo antiguo con servidor, la web reenviaba tu PDF desde tu
+  navegador al backend pasando por una función serverless de Vercel
+  (`web-example/api/convert.js`). Vercel solo lo transportaba; no lo
+  guardaba como archivo ni lo convertía. **La web nueva (`web/`) no
+  usa ese flujo: en modo navegador no hay tránsito, y en modo
+  servidor el navegador habla directo con el backend** (ver
+  `web-example/README.md`). El alojamiento del backend es Oracle
+  Cloud (el servidor donde corre el servicio, en la región elegida al
+  crear la cuenta).
 - **HTTPS:** la conexión entre tu navegador y el servidor va cifrada
   (certificado gratuito de Let's Encrypt gestionado por Caddy).
 
-## Cuánto tiempo se guardan los datos
+## Cuánto tiempo se guardan los datos (modo servidor opcional)
+
+En modo navegador no hay nada que guardar fuera de tu dispositivo:
+al cerrar la pestaña, el PDF y el resultado desaparecen de la
+memoria del navegador. En modo servidor:
 
 | Dato | Tiempo máximo |
 |---|---|
@@ -103,8 +156,10 @@ ningún documento ni de ningún usuario.
 
 ## Tus derechos y cómo pedir la eliminación
 
-Como no hay cuentas, no hay un botón de «borrar mi cuenta». Pero puedes
-pedir la eliminación de tus datos así:
+En modo navegador no hay nada que pedir: tus archivos nunca salieron
+de tu dispositivo. En modo servidor, como no hay cuentas, no hay un
+botón de «borrar mi cuenta». Pero puedes pedir la eliminación de tus
+datos así:
 
 1. **Espera 60 minutos**: tus archivos ya se habrán borrado solos. Es la
    vía más rápida y no necesita que hagas nada.
