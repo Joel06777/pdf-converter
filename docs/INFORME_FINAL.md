@@ -160,14 +160,72 @@ Build Logs del despliegue). Tamaños de primera visita actualizados:
 **4,75 MB con Brotli sin OCR; 9,60 MB con OCR** (antes decía 1,1 MB
 con gzip, cifra de cuando la web no tenía motor).
 
+### 1.7 Prueba de rendimiento de Word inestable en CI + Tesseract ausente en la VM (corregido, 26 nov 2026)
+
+**Problema 1 — la CI fallaba de forma intermitente.** En GitHub Actions, el
+job `test` falló en las ejecuciones #126–#132 con 1 prueba fallida
+(`tests/test_word_perf.py::test_word_referencia_rapida_y_completa`:
+«referencia Word tardó 3,95 s», límite 3,0 s), mientras las ejecuciones
+#133–#138 del mismo código pasaron. La prueba medía UNA sola conversión
+a Word con un umbral absoluto: el corredor compartido de GitHub es hasta
+~5x más lento que esta VM (referencia local 0,78–0,84 s frente a 3,95 s
+en GitHub), así que un umbral absoluto no puede separar «máquina lenta»
+de «regresión del algoritmo» en las dos máquinas.
+
+**Corrección.** La guarda ya no es un tiempo absoluto: mide la mejor de
+3 repeticiones a Word y a Excel del mismo PDF, en el mismo proceso, y
+exige que el cociente Word/Excel no supere un umbral (4,5 referencia;
+5,6 tabla grande; 5,2 estado 6p) más un tope absoluto generoso (10x el
+mejor tiempo local) como red de seguridad. El cociente cancela la
+velocidad de la máquina: Excel hace la misma extracción y cuadrícula
+pero no usa python-docx, así que si vuelve el O(n²) de `table.cell()`
+solo sube el numerador. Medido en local: ratios optimizados 2,70–2,97 /
+3,48–3,75 / 3,87–4,04 (sin carga y con 3 hilos quemando CPU; el ratio
+apenas se mueve, variación <= 8 %).
+
+**Verificación de que la guarda sigue detectando la regresión.**
+Sustituido temporalmente el índice plano por `table.cell()` (simulación
+parcial de la regresión), las 3 pruebas fallaron con ratios 10,55 /
+9,10 / 6,32; el convertidor se restauró byte a byte después (verificado
+con `diff`). No se tocó `app/converters/pdf_to_word.py`: el perfilado
+(cProfile) muestra el coste repartido dentro de python-docx (xpath,
+`get_child_element`, `OxmlElement`), sin un punto caliente propio que
+optimizar más; el coste que queda es inherente a construir la tabla
+celda a celda con python-docx.
+
+**Problema 2 — 2 pruebas de OCR fallaban en esta VM.** Al ejecutar la
+suite completa tras el arreglo, 2 pruebas de OCR fallaron
+(`test_scanned_pdf_uses_ocr`, `test_scanned_accuracy_vs_original`,
+precisión 0,0 %): el binario `tesseract` no estaba instalado en la VM
+(se perdió al recrearse la máquina; en la ronda 1 se había instalado
+con apt). Además los espejos de Ubuntu configurados
+(`azure.archive.ubuntu.com`, `mirror.cogentco.com`) no respondían
+(`apt-get update` colgado 21 min; curl con tiempo agotado), así que se
+añadió temporalmente `archive.ubuntu.com` como fuente
+(`/etc/apt/sources.list.d/temp-archive.sources`, se deja puesto porque
+es el archivo oficial de Ubuntu y los otros dos espejos no responden) y
+se instaló `tesseract-ocr 5.3.4` con `spa` y `eng`. Tras instalarlo,
+las 2 pruebas pasaron. Lección: si la VM se recrea, hay que reinstalar
+Tesseract antes de ejecutar pytest; la CI ya lo instala en cada
+ejecución (ver `.github/workflows/ci.yml`).
+
+### 1.8 Resumen de la ronda (todo medido, nada heredado sin re-verificar)
+
+- pytest: **119 passed, 2 warnings, en 120,42 s** (tras instalar
+  Tesseract; sin él, 2 pruebas de OCR fallaban — ver §1.7).
+- Prueba de rendimiento de Word: reescrita como guarda de ratio
+  Word/Excel (ver §1.7); pasa 3 de 3 veces en local y detecta la
+  regresión simulada en las 3 pruebas.
+
 ## 2. Resultados de las verificaciones
 
 ### pytest (oráculo Python, ejecutado por mí al final)
 
 ```bash
 .venv/bin/python -m pytest -q
-# 119 passed, 2 warnings, en 610,70 s (10 min por la carga paralela;
-#  en la ronda anterior, sin carga, ~171 s)
+# 119 passed, 2 warnings, en 120,42 s (26 nov 2026, tras la corrección
+#  de la prueba de rendimiento de Word y tras instalar Tesseract 5.3.4;
+#  sin Tesseract, 2 pruebas de OCR fallaban — ver §1.7)
 ```
 
 ### Motor del navegador (vitest, ejecutado por mí)
@@ -213,8 +271,16 @@ cd tests/browser && npx playwright test
 No ejecutada aquí (no hay `.git` local ni acceso de escritura a
 GitHub desde este entorno). El trabajo `browser` ya incluye el paso
 de build del motor (`npm run build` en `web/engine/`) antes de
-Playwright. La verificación final en verde la hace el dueño tras el
-push (ver §4.1).
+Playwright. Última comprobación en la página de Actions (26 nov 2026,
+10:15, antes del push de la corrección de §1.7): la ejecución #150
+para el head `a8a1cd7` estaba en cola (Queued), con los cuatro jobs
+(test, docker-build, docker-build-arm64, browser) en cola; las
+ejecuciones #139–#142 estaban en curso y #143–#149 en cola (una
+ejecución por cada push de la subida). Las ejecuciones #126–#132
+habían fallado por la prueba de rendimiento de Word que se corrige
+en §1.7 (3,95 s frente al límite de 3,0 s) y las #133–#138 habían
+pasado en verde (~18 min cada una). La verificación final en verde
+la hace el dueño tras el push de esta corrección (ver §5.1).
 
 ## 3. Métricas (paridad final, 26 nov 2026)
 
