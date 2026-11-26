@@ -1,0 +1,72 @@
+AVISOS DE LICENCIAS DE TERCEROS (NOTICE)
+=========================================
+
+Convertidor PDF → Word / Excel / PowerPoint
+Copyright (c) 2026 Joel06777
+Licencia del proyecto: GNU Affero General Public License v3.0 (AGPL-3.0).
+Ver el archivo LICENSE en la raíz del repositorio.
+
+Este servicio usa software de terceros. Cada componente sigue perteneciendo
+a sus autores y se distribuye bajo su propia licencia. La lista completa,
+con enlaces oficiales, está en docs/LICENCIAS.md. Este archivo resume los
+avisos que exigen esas licencias.
+
+COMPONENTES PRINCIPALES
+-----------------------
+- PyMuPDF 2.2 — Copyright (c) Artifex Software, Inc.
+  Licencia: GNU AGPL-3.0 o licencia comercial de Artifex.
+  https://github.com/pymupdf/PyMuPDF
+- pdf2docx 0.5.13 — Copyright (c) 2026 Artifex Software, Inc.
+  Licencia: MIT.
+  https://github.com/ArtifexSoftware/pdf2docx
+- python-docx 1.2.0 — Licencia MIT.
+  https://github.com/python-openxml/python-docx
+- python-pptx 1.0.2 — Licencia MIT.
+  https://github.com/python-openxml/python-pptx
+- openpyxl 3.1.5 — Licencia MIT.
+  https://foss.heptapod.net/openpyxl/openpyxl
+- Pillow 12.3.0 — Licencia MIT-CMU.
+  https://github.com/python-pillow/Pillow
+- NumPy 2.5.3 — Licencia BSD-3-Clause.
+  https://github.com/numpy/numpy
+- FastAPI 0.165.0 — Licencia MIT. Starlette — Licencia BSD-3-Clause.
+  Pydantic — Licencia MIT.
+  https://github.com/fastapi/fastapi
+- Uvicorn 0.54.0 — Licencia BSD-3-Clause.
+  https://github.com/encode/uvicorn
+- python-multipart 0.0.32 — Licencia Apache-2.0.
+  https://github.com/Kludex/python-multipart
+- Celery 5.7.0 — Licencia BSD-3-Clause.
+  https://github.com/celery/celery
+- redis (cliente Python) 8.2.0 — Licencia MIT.
+  https://github.com/redis/redis-py
+- fonttools — Licencia MIT. opencv-python-headless — Licencia Apache-2.0.
+  fire — Licencia Apache-2.0. (Dependencias transitivas de pdf2docx.)
+
+HERRAMIENTAS DEL SISTEMA (IMAGEN DOCKER)
+-----------------------------------------
+- Tesseract OCR 5.x — Licencia Apache-2.0.
+  https://github.com/tesseract-ocr/tesseract
+- OCRmyPDF — Licencia MPL-2.0.
+  https://github.com/ocrmypdf/OCRmyPDF
+- Ghostscript — Licencia AGPL-3.0 o comercial de Artifex.
+  https://www.ghostscript.com/
+- Liberation Fonts — SIL Open Font License 1.1.
+  https://github.com/liberationfonts/liberation-fonts
+- DejaVu Fonts — Licencia Bitstream Vera.
+  https://dejavu-fonts.github.io/
+- Servidor Redis 7 (imagen redis:7-alpine) — Licencia BSD-3-Clause.
+  https://github.com/redis/redis
+
+SOLO DESARROLLO (NO SE DESPLIEGA)
+----------------------------------
+- pytest — Licencia MIT. httpx — Licencia BSD-3-Clause.
+  locust — Licencia MIT.
+
+NOTA
+----
+Las licencias MIT, BSD, Apache-2.0 y SIL OFL exigen conservar el aviso de
+copyright y el texto de la licencia. Los textos completos de cada licencia
+se encuentran en los paquetes instalados (archivos LICENSE de cada
+distribución) y en los enlaces oficiales indicados arriba y en
+docs/LICENCIAS.md. Esto no es asesoría legal.
