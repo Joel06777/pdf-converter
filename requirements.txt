@@ -1,0 +1,13 @@
+# Versiones con las que se ejecutaron las pruebas (11/11 pasan)
+pymupdf==2.2
+pdf2docx==0.5.13
+python-docx==1.2.0
+python-pptx==1.0.2
+openpyxl==3.1.5
+pillow==12.3.0
+numpy==2.5.3
+fastapi==0.165.0
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32
+celery==5.7.0
+redis==8.2.0
