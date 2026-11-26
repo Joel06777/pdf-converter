@@ -39,6 +39,32 @@ def run_job(job_id: str) -> None:
                 raise ValueError("El PDF está protegido con contraseña.")
             if doc.page_count > settings.max_pages:
                 raise ValueError(f"El PDF supera el máximo de {settings.max_pages} páginas.")
+            # Tope de OCR (MAX_OCR_PAGES): el OCR es el paso más caro
+            # (Tesseract a 300 dpi + confianza por palabra). Se replica aquí
+            # la condición del convertidor (app/converters/extract.py): una
+            # página necesita OCR si tiene una imagen que cubre >=80% de la
+            # página y menos de 20 caracteres de texto nativo. Por encima del
+            # tope el trabajo termina en error con un mensaje claro, en vez
+            # de ocupar un worker durante minutos.
+            scanned = 0
+            for page in doc:
+                rect = page.rect
+                area = rect.width * rect.height
+                full_image = False
+                for info in page.get_image_info(xrefs=True):
+                    inter = pymupdf.Rect(info["bbox"]) & rect
+                    if inter.is_empty:
+                        continue
+                    if inter.width * inter.height >= 0.80 * area:
+                        full_image = True
+                        break
+                if full_image and len(page.get_text().strip()) < 20:
+                    scanned += 1
+            if scanned > settings.max_ocr_pages:
+                raise ValueError(
+                    f"El documento tiene {scanned} páginas escaneadas y el máximo con OCR "
+                    f"es {settings.max_ocr_pages} por trabajo. Divide el PDF en partes "
+                    f"más pequeñas e inténtalo de nuevo.")
             if _has_xfa(doc):
                 raise ValueError(
                     "El PDF es un formulario dinámico (XFA) y no se puede convertir. "
