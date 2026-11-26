@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF a PowerPoint gratis — convierte PDF a .pptx en tu dispositivo</title>
+<meta name="description" content="Convierte un PDF a PowerPoint (.pptx) gratis y sin subirlo a ningún servidor. Cada página queda como una diapositiva editable y las páginas con tablas quedan como tablas de PowerPoint.">
+<meta name="theme-color" content="#0f766e">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; worker-src 'self' blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
+<link rel="stylesheet" href="./styles.css">
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Convertidor PDF a PowerPoint",
+  "applicationCategory": "UtilitiesApplication",
+  "operatingSystem": "Navegador web",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "description": "Convierte un PDF a PowerPoint (.pptx) gratis, en tu propio dispositivo, sin subir el archivo a ningún servidor."
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    { "@type": "Question", "name": "¿Mi PDF se sube a algún servidor al convertirlo a PowerPoint?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. La conversión ocurre en tu propio dispositivo, en el navegador. El archivo no sale de tu computadora ni de tu celular." } },
+    { "@type": "Question", "name": "¿Cada página del PDF queda como una diapositiva?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Sí: una diapositiva editable por página. Las páginas con tablas quedan como tablas nativas de PowerPoint." } },
+    { "@type": "Question", "name": "¿El texto queda editable o como imagen?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Queda como texto editable. Solo los gráficos vectoriales complejos y los logotipos quedan como imágenes en su posición." } }
+  ]
+}
+</script>
+</head>
+<body>
+<header class="site">
+  <nav aria-label="Herramientas">
+    <a href="./index.html">Convertidor</a>
+    <a href="./excel.html">PDF a Excel</a>
+    <a href="./word.html">PDF a Word</a>
+    <a href="./pptx.html" aria-current="page">PDF a PowerPoint</a>
+    <a href="./privacy.html">Privacidad</a>
+  </nav>
+  <h1>PDF a PowerPoint, gratis y en tu dispositivo</h1>
+  <p class="sub">Convierte tu PDF a una presentación de PowerPoint (.pptx): una diapositiva editable por página, y las páginas con tablas quedan como tablas de PowerPoint. Sin cuentas, sin subir tu archivo a ningún servidor.</p>
+  <p><a class="download" href="./index.html?target=pptx">Convertir un PDF a PowerPoint ahora</a></p>
+</header>
+<main>
+  <section class="card">
+    <h2>Cómo funciona</h2>
+    <ol class="steps">
+      <li><strong>Elige tu PDF</strong> (arrastra o pulsa «elige un archivo»). Puedes elegir varios a la vez.</li>
+      <li><strong>Elige el destino «PowerPoint»</strong> y, si quieres, limita el rango de páginas.</li>
+      <li><strong>Revisa la vista previa</strong> del original junto al resultado.</li>
+      <li><strong>Descarga el .pptx</strong> (o todos los resultados juntos en un ZIP).</li>
+    </ol>
+  </section>
+  <section class="card">
+    <h2>Qué queda bien y qué no</h2>
+    <p><strong>Queda bien:</strong> presentaciones y reportes página por página; el texto queda editable y las tablas quedan como tablas.</p>
+    <p><strong>Cuesta más:</strong> texto rotado 180° (queda horizontal, porque PowerPoint no admite esa rotación en cuadros de texto) y gráficos vectoriales complejos (quedan como imagen). Detalle completo en <a href="https://github.com/Joel06777/pdf-converter/blob/main/docs/LIMITES.md">los límites conocidos</a>.</p>
+  </section>
+  <section class="card faq">
+    <h2>Preguntas frecuentes</h2>
+    <details><summary>¿Mi PDF se sube a algún servidor?</summary><p>No. La conversión ocurre en tu propio dispositivo. Lee la <a href="./privacy.html">política de privacidad</a>.</p></details>
+    <details><summary>¿Cada página queda como una diapositiva?</summary><p>Sí: una diapositiva editable por página del rango elegido.</p></details>
+    <details><summary>¿El texto queda editable?</summary><p>Sí. Solo los gráficos vectoriales complejos quedan como imágenes en su posición.</p></details>
+    <details><summary>¿Cuánto cuesta?</summary><p>Nada. Es gratis y no necesitas cuenta.</p></details>
+  </section>
+</main>
+<footer class="site">
+  <nav aria-label="Enlaces del pie">
+    <a href="https://github.com/Joel06777/pdf-converter">Código fuente</a>
+    <a href="./privacy.html">Política de privacidad</a>
+    <a href="https://github.com/Joel06777/pdf-converter/issues/new">Reportar una incidencia</a>
+  </nav>
+  <p>Convertidor PDF a PowerPoint. Software libre bajo licencia AGPL-3.0. El archivo no sale de tu dispositivo.</p>
+</footer>
+</body>
+</html>
