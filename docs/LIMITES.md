@@ -23,9 +23,10 @@ usuario en vez de entregar un resultado malo en silencio).
 ## OCR / escaneos
 - **Escaneos borrosos, con sombras o manuscritos:** la precisión de cifras
   baja. Medido en escaneos limpios a 200 dpi: 100 % de cifras; en foto
-  inclinada 3°: 100 % de cifras pero 85,5 % de texto. En escaneos malos la
-  cifra puede caer por debajo del 97 %: por eso existe `ocr_warning` y el
-  resaltado amarillo de celdas dudosas en Excel.
+  inclinada 3°: 100 % de cifras y 96,8 % de texto (tokens); en foto de
+  celular con perspectiva: 100 % de cifras y 96,8 % de texto. En
+  escaneos malos la cifra puede caer por debajo del 97 %: por eso
+  existe `ocr_warning` y el resaltado amarillo de celdas dudosas en Excel.
 - **Sellos y marcas de agua de color sobre el texto:** la binarización los
   atenúa, pero un sello oscuro sobre una cifra puede hacer que se pierda.
 - **Escritura manuscrita:** no soportada (Tesseract está entrenado para texto
@@ -44,7 +45,65 @@ usuario en vez de entregar un resultado malo en silencio).
   página; dos tablas separadas verticalmente quedan en la misma hoja, una
   debajo de otra (correcto), pero sin separación explícita de "tabla 1 / 2".
 
-## API y operación
+## Motor del navegador (web/, modo por defecto)
+
+La conversión ocurre en el dispositivo del visitante, así que los
+límites dependen de su aparato. La página detecta la capacidad
+(`navigator.deviceMemory`, `navigator.hardwareConcurrency`) y ajusta
+los máximos con un mensaje claro en español. Límites recomendados
+por defecto (`web/app.js`):
+
+| Dispositivo | Páginas máx. | Tamaño máx. |
+|---|---|---|
+| PC o celular con más de 4 GB de memoria | 200 | 50 MB |
+| 4 GB de memoria o menos | 60 | 25 MB |
+| 2 GB de memoria o menos | 20 | 10 MB |
+| Celular (sin dato de memoria) | 100 | 25 MB |
+
+- **Si el PDF supera el límite del dispositivo**, la página lo dice
+  antes de convertir («Este PDF es grande para tu dispositivo;
+  prueba con un rango de páginas») y sugiere el rango. No se intenta
+  convertir a ciegas.
+- **Safari y celulares antiguos:** el motor usa WebAssembly; en
+  navegadores muy viejos sin WebAssembly o sin `OffscreenCanvas` la
+  conversión puede no arrancar. La página lo detecta y lo dice. El
+  OCR en el navegador es más lento que en el servidor (las cifras
+  medidas en el servidor, ~4–6 s por página escaneada, no se
+  trasladan al navegador sin medir allí).
+- **PDF con contraseña:** error claro, no se intenta adivinarla (igual
+  que en el servidor).
+- **Formularios XFA:** no se convierten (igual que en el servidor).
+- **Word de texto corrido complejo y escaneos enormes:** el navegador
+  puede no resolverlos; en ese caso la página sugiere el servidor
+  opcional si está activo (ver `docs/SERVIDOR_OPCIONAL.md`).
+- **Sin conexión tras la primera visita:** la página funciona (PWA),
+  pero el motor y los datos de idioma del OCR tienen que haberse
+  descargado antes. La primera visita necesita internet.
+
+## PDFs defectuosos, cifrados y hostiles
+
+Casos generados por código en `web/tests/` (ver
+`web/tests/hostile-cases.md`): PDF truncado, cifrado real AES-256,
+xref roto, conteo de páginas mentiroso (declara 10.000, tiene 1),
+XFA, `Length` mentiroso, bucle de referencias, archivo vacío, solo
+cabecera, texto plano con extensión .pdf y página gigante
+(100.000 × 100.000 puntos).
+
+Reglas que debe cumplir el motor ante todos ellos (aún **sin
+medir**: el motor existe pero no tiene punto de entrada para el
+navegador todavía; la tabla de
+`web/tests/hostile-cases.md` está vacía):
+
+1. Nunca se cuelga la pestaña (tope de 30 s por apertura).
+2. Nunca se cae la página: un PDF malo da un mensaje, no una
+   pantalla en blanco.
+3. El mensaje es en español y dice qué hacer.
+4. No se reserva memoria según lo que el PDF declara (conteo de
+   páginas, `Length`, tamaño de página): se comprueba contra lo real
+   antes de reservar.
+5. Nada de esto se sube a ningún servidor.
+
+## API y operación (servidor opcional)
 - **Límite:** 50 MB y 200 páginas por archivo; 60 conversiones/hora por IP
   por defecto; resultados borrados a los 60 minutos.
 - **PDF con contraseña:** error claro, no se intenta adivinarla.
