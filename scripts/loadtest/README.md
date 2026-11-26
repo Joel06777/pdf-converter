@@ -1,5 +1,12 @@
 # Prueba de carga
 
+> Resultados reales (26 nov 2026, 200 usuarios, modo inline):
+> ver [`RESULTADOS.md`](RESULTADOS.md). Resumen: 200 usuarios, 2 min —
+> POST p95 99 s, E2E p95 103 s, 0 fallos, ~43 conversiones/min en modo
+> inline en una VM x86_64 con CPU compartida (NO es Oracle). El
+> `locustfile.py` ya genera PDFs reales de 10 y 50 páginas (antes los
+> fixtures de «10» y «50» tenían 3 y 1 páginas).
+
 ## Ejecutar (contra un backend en local o en el VPS)
 ```bash
 pip install -r requirements-dev.txt   # incluye locust
