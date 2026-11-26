@@ -7,3 +7,8 @@ output/
 .venv/
 resultados/
 scripts/loadtest/generated/
+scripts/parity/
+tests/browser/node_modules/
+tests/browser/test-results/
+tests/browser/playwright-report/
+scripts/parity-ocr/
