@@ -1,5 +1,8 @@
-/* Frontend de ejemplo (HTML + JS puro). Habla con la función serverless de
-   Vercel /api/convert, que reenvía al backend con la clave de API.
+/* Frontend de ejemplo (HTML + JS puro). Flujo nuevo: pide un token de subida
+   a la función serverless /api/upload-token y sube el PDF DIRECTO al backend
+   con ese token (sin pasar por Vercel, que limita a 4,5 MB); el estado y la
+   descarga también van directos al backend. Si el token no se puede obtener,
+   usa como respaldo el flujo antiguo por /api/convert.
    La clave de API NUNCA va en el navegador. */
 (function () {
   "use strict";
@@ -74,16 +77,42 @@
     qualityBox.textContent = text;
   }
 
-  convertBtn.addEventListener("click", function () {
-    if (!file) return;
-    hideError();
-    qualityBox.hidden = true;
-    downloadLink.hidden = true;
-    progressBox.hidden = false;
-    barFill.style.width = "5%";
-    progressText.textContent = "Subiendo…";
-    convertBtn.disabled = true;
+  // Flujo nuevo (directo): el navegador pide un token de subida a la función
+  // serverless /api/upload-token (que usa la clave solo en el servidor) y luego
+  // sube el PDF DIRECTO al backend con ese token, sin pasar por Vercel: así
+  // no aplica el límite de 4,5 MB del plan Hobby. El estado y la descarga
+  // también van directos al backend. La clave de API NUNCA va en el navegador.
+  var backendUrl = null; // base del backend en modo directo; null = flujo antiguo
 
+  function startDirectUpload(tokenInfo) {
+    backendUrl = tokenInfo.backend_url || null;
+    var form = new FormData();
+    form.append("file", file);
+    form.append("target", document.getElementById("target").value);
+    form.append("layout", document.getElementById("layout").value);
+
+    fetch(tokenInfo.upload_url, {
+      method: "POST",
+      headers: { "X-Upload-Token": tokenInfo.upload_token },
+      body: form,
+    })
+      .then(function (r) {
+        if (!r.ok) return r.json().then(function (j) { throw new Error(j.detail || "No se pudo subir el PDF."); });
+        return r.json();
+      })
+      .then(function (created) { poll(created.job_id); })
+      .catch(function (err) {
+        progressBox.hidden = true;
+        convertBtn.disabled = false;
+        showError(err.message);
+      });
+  }
+
+  function startLegacyUpload() {
+    // Respaldo: flujo antiguo por la función serverless /api/convert, que
+    // reenvía el PDF al backend. Solo sirve para PDFs de hasta 4,5 MB en el
+    // plan Hobby de Vercel.
+    backendUrl = null;
     var form = new FormData();
     form.append("file", file);
     form.append("target", document.getElementById("target").value);
@@ -100,11 +129,41 @@
         convertBtn.disabled = false;
         showError(err.message);
       });
+  }
+
+  convertBtn.addEventListener("click", function () {
+    if (!file) return;
+    hideError();
+    qualityBox.hidden = true;
+    downloadLink.hidden = true;
+    progressBox.hidden = false;
+    barFill.style.width = "5%";
+    progressText.textContent = "Subiendo…";
+    convertBtn.disabled = true;
+
+    // 1) Pedir el token de subida (la clave solo la conoce el servidor).
+    // Si este paso falla (p. ej. el backend aún no tiene subida directa),
+    // se usa el flujo antiguo como respaldo.
+    fetch("/api/upload-token", { method: "POST" })
+      .then(function (r) {
+        if (!r.ok) throw new Error("sin token");
+        return r.json();
+      })
+      .then(function (tokenInfo) {
+        if (!tokenInfo.upload_token || !tokenInfo.upload_url) throw new Error("sin token");
+        startDirectUpload(tokenInfo);
+      })
+      .catch(function () { startLegacyUpload(); });
   });
 
   function poll(jobId) {
     var timer = setInterval(function () {
-      fetch("/api/jobs?id=" + jobId)
+      // En modo directo el estado se consulta directo al backend; en el
+      // flujo antiguo, a través de la función serverless /api/jobs.
+      var url = backendUrl
+        ? backendUrl + "/api/v1/jobs/" + jobId
+        : "/api/jobs?id=" + jobId;
+      fetch(url)
         .then(function (r) { return r.json(); })
         .then(function (job) {
           var p = job.progress || 0;
@@ -116,7 +175,13 @@
             clearInterval(timer);
             progressText.textContent = "Listo.";
             barFill.style.width = "100%";
-            downloadLink.href = job.download_url;
+            // La URL de descarga del backend es relativa: en modo directo se
+            // completa con la base del backend; en el flujo antiguo ya viene
+            // reescrita a /api/download por la función serverless.
+            downloadLink.href = backendUrl && job.download_url &&
+              job.download_url.charAt(0) === "/"
+              ? backendUrl + job.download_url
+              : job.download_url;
             downloadLink.hidden = false;
             convertBtn.disabled = false;
             showQuality(job.info);
