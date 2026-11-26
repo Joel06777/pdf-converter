@@ -8,19 +8,25 @@ python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 sudo apt install tesseract-ocr tesseract-ocr-spa tesseract-ocr-eng ocrmypdf  # OCR para escaneados
 python scripts/generate_fixtures.py   # genera los PDFs de prueba de tests/fixtures/
 python scripts/convert_cli.py tests/fixtures/estado_ingresos_octubre_2026.pdf excel
-pytest -q                            # 33 pruebas
-STORAGE_DIR=./data REDIS_URL= uvicorn app.main:app --reload
+pytest -q                            # 69 pruebas (medido el 26 nov 2026)
+STORAGE_DIR=./data REDIS_URL= .venv/bin/uvicorn app.main:app --reload
 ```
 
 ## Producción
 ```bash
-cp .env.example .env     # edita ALLOWED_ORIGINS, API_KEY y DOWNLOAD_SECRET
-docker compose up -d --build --scale worker=4
+cp .env.example .env     # edita ALLOWED_ORIGINS, API_KEY, DOWNLOAD_SECRET y UPLOAD_SECRET
+docker compose up -d --build --scale worker=2
 ```
+
+Guía completa para desplegar sin pagar nada: `docs/DESPLIEGUE_GRATIS.md`
+(Oracle Cloud Always Free + DuckDNS + Caddy). Para reconstruir el servidor
+desde cero con un solo script: `scripts/bootstrap.sh`.
 
 ## API
 | Método | Ruta | Descripción |
 |---|---|---|
+| POST | `/api/v1/upload-token` | pide un token de subida firmado (con API key; lo llama la función de Vercel, nunca el navegador) → `{upload_token, expires_in: 300, max_mb, upload_url}` |
+| POST | `/api/v1/upload` | subida directa al backend con header `X-Upload-Token` (sin límite de 4,5 MB de Vercel) → `{job_id}` |
 | POST | `/api/v1/convert` | `file` (PDF) + `target` = `excel` \| `word` \| `pptx` (+ `layout` = `pages`\|`continuous`, `formulas` = true\|false) → `{job_id}` |
 | POST | `/api/v1/convert-many` | varios `files` + `target` → `{jobs: [{job_id, filename}]}` (máx. 20) |
 | GET | `/api/v1/jobs/{id}` | estado (`queued/processing/done/error/cancelled`), progreso, informe `info.quality`, `download_url` |
@@ -40,11 +46,25 @@ Cada conversión devuelve `quality.text_coverage` y `quality.number_coverage` (1
 - `app/converters/verify.py`: métrica de calidad automática.
 - `app/converters/ocr.py`: enderezado, detección de rotación, confianza por palabra.
 - `app/metrics.py`, `app/jsonlog.py`: métricas Prometheus y logs JSON sin contenido del documento.
-- `web-example/`: frontend de ejemplo (HTML + JS puro) y funciones serverless de Vercel (`api/convert.js`).
-- `scripts/loadtest/`: prueba de carga con Locust.
-- `docs/`: `METRICAS.md` (medidas reales), `DESPLIEGUE.md`, `LICENCIAS.md`, `LIMITES.md`.
+- `web-example/`: frontend de ejemplo (HTML + JS puro) y funciones serverless de Vercel (`api/upload-token.js`, `api/convert.js`). El navegador sube el PDF directo al backend con un token firmado, sin pasar por Vercel (sin límite de 4,5 MB).
+- `scripts/loadtest/`: prueba de carga con Locust y sus resultados medidos (`RESULTADOS.md`).
+- `docs/`: `METRICAS.md` (medidas reales), `DESPLIEGUE.md`, `DESPLIEGUE_GRATIS.md` (Oracle Always Free paso a paso), `LICENCIAS.md`, `LIMITES.md`, `PRIVACIDAD.md`, `INFORME_FINAL.md`.
 - `PROMPT_PARA_IA.md`: instrucciones completas para que otra IA continúe y amplíe el proyecto.
 
-## Licencia de PyMuPDF
-PyMuPDF se distribuye bajo AGPL-3.0 (o licencia comercial de Artifex). Para un servicio web público debes
-cumplir la AGPL (publicar el código del servicio) o comprar la licencia comercial. Detalle y alternativas en `docs/LICENCIAS.md`.
+## Licencia
+
+Este servicio se publica bajo la **GNU Affero General Public License v3.0
+(AGPL-3.0)** — ver el archivo `LICENSE` y los avisos de terceros en `NOTICE`.
+La razón es su motor, **PyMuPDF, que es AGPL-3.0** (o licencia comercial de
+Artifex): al ofrecer el servicio por la web, la AGPL exige publicar el
+código fuente del servicio, incluidas las modificaciones.
+
+**Antes de lanzar, el repositorio debe hacerse público** (hoy es privado) y
+la web debe mostrar un enlace visible **«Código fuente»** que apunte a ese
+repositorio. Sin ese paso, el servicio no puede ofrecerse públicamente de
+forma gratuita; la otra vía es comprar la licencia comercial de PyMuPDF.
+Detalle, tabla completa de dependencias y la alternativa sin AGPL en
+`docs/LICENCIAS.md`.
+
+> Esto no es asesoría legal. Si el servicio va a ganar dinero, consulta a un
+> abogado antes de lanzar.
