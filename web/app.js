@@ -99,6 +99,10 @@
   async function ensureEngine() {
     if (state.engine) return state.engine;
     if (state.engineState === "missing") throw new Error("ENGINE_MISSING");
+    /* Si una carga anterior ya falló, el motor quedó a medias y un nuevo
+       intento daría un error confuso («motor no inicializado»); lo único
+       que lo arregla es recargar la página. */
+    if (state.engineState === "error") throw new Error("El motor no se pudo cargar. Recarga la página y vuelve a intentarlo.");
     state.engineState = "loading";
     setProgress(0.05, "Cargando el motor de conversión…");
     try {

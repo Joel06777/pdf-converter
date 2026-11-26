@@ -1,10 +1,14 @@
 /* Service Worker (PWA): uso sin conexión tras la primera visita.
    Estrategia: la cáscara de la app (HTML, CSS, JS y librerías vendidas)
-   se guarda en caché en la instalación y se sirve desde caché; el
-   motor (web/engine/) también, porque es código propio del mismo sitio.
+   se guarda en caché en la instalación y se sirve desde caché.
+   El motor (web/engine/) y las librerías grandes (vendor/) NO pasan por
+   el service worker: su descarga (varios MB, con compresión) se atascaba
+   a veces cuando el worker intentaba guardarla en caché y la conversión
+   se quedaba en «Descargando MuPDF.js…». Van directas a la red; la caché
+   HTTP del navegador (max-age) las guarda para la próxima visita.
    Los datos de idioma del OCR y los archivos del usuario NUNCA se
    guardan en caché: no son parte de la app. */
-var CACHE_NAME = "pdf-converter-v2";
+var CACHE_NAME = "pdf-converter-v3";
 var APP_SHELL = [
   "./",
   "./index.html",
@@ -56,22 +60,17 @@ self.addEventListener("fetch", function (event) {
   var url = new URL(event.request.url);
   /* Solo se cachea lo del propio sitio. Nada de terceros. */
   if (url.origin !== self.location.origin) return;
-  /* Los archivos del usuario (blob:) y el motor aún no instalado no
-     pasan por aquí: fetch solo ve peticiones de red del mismo origen. */
+  /* El motor y las librerías grandes NO pasan por el service worker:
+     su descarga (varios MB, con compresión) se atascaba a veces cuando
+     el worker intentaba guardarla en caché. Van directas a la red; la
+     caché HTTP del navegador (max-age) las guarda para la próxima vez. */
+  if (url.pathname.indexOf("/engine/") === 0 || url.pathname.indexOf("/vendor/") === 0) return;
+  /* Los archivos del usuario (blob:) no pasan por aquí: fetch solo ve
+     peticiones de red del mismo origen. */
   event.respondWith(
     caches.match(event.request, { ignoreSearch: true }).then(function (cached) {
       if (cached) return cached;
-      return fetch(event.request).then(function (res) {
-        /* Se guarda en caché solo lo que sea parte de la app (mismo
-           origen y respuesta correcta). El motor se cachea cuando
-           exista: su primera descarga lo deja disponible sin conexión. */
-        if (res.ok && event.request.method === "GET" &&
-            (url.pathname.indexOf("/engine/") === 0 || url.pathname.indexOf("/vendor/") === 0)) {
-          var copy = res.clone();
-          caches.open(CACHE_NAME).then(function (cache) { cache.put(event.request, copy); });
-        }
-        return res;
-      });
+      return fetch(event.request);
     })
   );
 });
