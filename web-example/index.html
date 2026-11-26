@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Convertidor PDF → Word / Excel / PowerPoint</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main>
+  <h1>Convertidor PDF</h1>
+  <p class="sub">Convierte tu PDF a Word, Excel o PowerPoint. Sin cuentas, sin subirlo a servicios de terceros: la conversión corre en nuestro propio servidor.</p>
+
+  <div id="drop" class="drop" tabindex="0">
+    <p><strong>Arrastra tu PDF aquí</strong> o <button id="pickBtn" type="button">elige un archivo</button></p>
+    <p class="hint">PDF de hasta 50 MB y 200 páginas.</p>
+    <input id="fileInput" type="file" accept="application/pdf" hidden>
+  </div>
+
+  <div id="fileInfo" class="fileinfo" hidden></div>
+
+  <label class="field">Destino
+    <select id="target">
+      <option value="excel">Excel (.xlsx)</option>
+      <option value="word">Word (.docx)</option>
+      <option value="pptx">PowerPoint (.pptx)</option>
+    </select>
+  </label>
+
+  <label class="field">Diseño de Excel
+    <select id="layout">
+      <option value="pages">Una hoja por página</option>
+      <option value="continuous">Una sola hoja continua</option>
+    </select>
+  </label>
+
+  <button id="convertBtn" type="button" disabled>Convertir</button>
+
+  <div id="progress" class="progress" hidden>
+    <div class="bar"><div id="barFill"></div></div>
+    <p id="progressText">En cola…</p>
+  </div>
+
+  <div id="quality" class="quality" hidden></div>
+  <div id="error" class="error" hidden></div>
+  <a id="download" class="download" hidden>Descargar archivo convertido</a>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
