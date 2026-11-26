@@ -26,6 +26,7 @@
 import { copyFile, mkdir, readdir, rm, stat, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
 import { build } from "vite";
 
 const engineDir = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -34,7 +35,7 @@ const distDir = join(engineDir, "dist");
 const tessDir = join(engineDir, ".tessdata");
 
 const TESSDATA_BASE =
-  "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main";
+  "https://github.com/tesseract-ocr/tessdata_fast/raw/main";
 
 async function exists(path) {
   try {
@@ -53,20 +54,42 @@ async function ensureTessdata() {
       console.log(`tessdata: ${lang} ya existe, se reutiliza.`);
       continue;
     }
-    const url = `${TESSDATA_BASE}/${lang}.traineddata.gz`;
-    console.log(`tessdata: descargando ${url} …`);
-    const res = await fetch(url);
-    if (!res.ok) {
+    // OJO: el repo tessdata_fast NO publica archivos .traineddata.gz
+    // (la URL antigua .../main/{lang}.traineddata.gz devuelve 404):
+    // se descarga el .traineddata y se comprime a .gz, igual que hace
+    // tests/helpers.js para las pruebas. Sin esto el build fallaba
+    // siempre en un checkout limpio (la CI #153 lo habría sufrido
+    // justo después del fallo de vite). Se reintenta 5 veces con 5 s
+    // entre intentos: la descarga de eng (4 MB) a veces se corta por
+    // la red (en esta VM falló 3 veces seguidas y minutos después la
+    // misma URL dio 200).
+    const url = `${TESSDATA_BASE}/${lang}.traineddata`;
+    let res = null;
+    let lastError = null;
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        console.log(`tessdata: descargando ${url} (intento ${attempt}/5) …`);
+        res = await fetch(url);
+        if (res.ok) break;
+        lastError = new Error(`HTTP ${res.status}`);
+        res = null;
+      } catch (err) {
+        lastError = err;
+        res = null;
+      }
+      if (attempt < 5) await new Promise((r) => setTimeout(r, 5000));
+    }
+    if (!res) {
       throw new Error(
-        `No se pudo descargar ${url} (HTTP ${res.status}). ` +
+        `No se pudo descargar ${url} tras 5 intentos (${lastError?.message}). ` +
           `Sin estos datos el OCR no funciona. Descárgalos a mano en web/engine/.tessdata/ ` +
           `desde https://github.com/tesseract-ocr/tessdata_fast (gratis, sin cuenta).`,
       );
     }
     const bytes = new Uint8Array(await res.arrayBuffer());
     const { writeFile } = await import("node:fs/promises");
-    await writeFile(dest, bytes);
-    console.log(`tessdata: ${lang} guardado (${bytes.length} bytes).`);
+    await writeFile(dest, gzipSync(bytes, { level: 9 }));
+    console.log(`tessdata: ${lang} guardado (${bytes.length} bytes sin comprimir).`);
   }
 }
 
