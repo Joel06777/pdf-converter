@@ -37,9 +37,12 @@ def _client_ip(request: Request) -> str:
     return fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "?")
 
 
-def check_access(request: Request, x_api_key: str = Header(default="")):
-    if settings.api_key and x_api_key != settings.api_key:
-        raise HTTPException(401, "API key inválida.")
+def _check_rate_limit(request: Request) -> None:
+    """Límite de peticiones por IP y hora (Redis si hay, memoria si no).
+
+    Se usa tanto en las rutas con API key (check_access) como en la subida
+    directa, que no lleva API key pero sí token firmado.
+    """
     ip, limit = _client_ip(request), settings.rate_limit_per_hour
     if settings.redis_url:
         global _redis
@@ -60,6 +63,33 @@ def check_access(request: Request, x_api_key: str = Header(default="")):
             raise HTTPException(429, "Demasiadas conversiones por hora. Intenta más tarde.")
         hits.append(now)
         _hits[ip] = hits
+
+
+def _check_queue_capacity(extra: int = 0) -> None:
+    """Tope de cola: si hay demasiados trabajos en curso, rechazar con 503.
+
+    `extra` cuenta los trabajos que esta misma petición va a crear
+    (convert-many). Responde 503 con mensaje en español, sin consumir el
+    token de subida ni leer el archivo, para que el cliente pueda reintentar.
+    """
+    if jobs.count_active_jobs() + extra >= settings.max_queue_jobs:
+        raise HTTPException(503, "Estamos con mucha demanda, intenta en unos minutos")
+
+
+# Anti-abuso (opcional, no implementado): Cloudflare Turnstile es gratis
+# (plan Free: 0 $/mes, retos ilimitados, hasta 20 widgets, sin tarjeta —
+# verificado en cloudflare.com/products/turnstile el 26 nov 2026). Si el
+# abuso persiste pese al límite por IP y al tope de cola, el camino es
+# añadir el widget de Turnstile en web-example/ y verificar el token en el
+# servidor contra https://challenges.cloudflare.com/turnstile/v0/siteverify
+# antes de aceptar el trabajo. No se activa aquí: exige cuenta de
+# Cloudflare y claves (TURNSTILE_SITE_KEY / TURNSTILE_SECRET_KEY).
+
+
+def check_access(request: Request, x_api_key: str = Header(default="")):
+    if settings.api_key and x_api_key != settings.api_key:
+        raise HTTPException(401, "API key inválida.")
+    _check_rate_limit(request)
 
 
 def _download_url(job_id: str) -> str:
@@ -114,9 +144,73 @@ def metrics():
     return render_prometheus(collect())
 
 
+@app.post("/api/v1/upload-token", dependencies=[Depends(check_access)])
+async def create_upload_token_endpoint(request: Request):
+    """Token de subida directa: lo pide la función serverless de Vercel con la
+    API key (la clave nunca llega al navegador) y el navegador sube el PDF
+    directo al backend con ese token (ver POST /api/v1/upload)."""
+    if not settings.upload_secret:
+        raise HTTPException(503, "La subida directa no está configurada en el servidor (falta UPLOAD_SECRET).")
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    max_mb = body.get("max_mb") if isinstance(body, dict) else None
+    if max_mb is not None:
+        try:
+            max_mb = int(max_mb)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "max_mb debe ser un número entero de megabytes.")
+    try:
+        token = jobs.create_upload_token(max_mb=max_mb)
+        payload = jobs.validate_upload_token(token)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {
+        "upload_token": token,
+        "expires_in": settings.upload_token_ttl_seconds,
+        "max_mb": payload["max_mb"],
+        "upload_url": "/api/v1/upload",
+    }
+
+
+@app.post("/api/v1/upload", status_code=202)
+async def upload_direct(background: BackgroundTasks, request: Request, file: UploadFile = File(...),
+                        target: str = Form(...), layout: str = Form("pages"),
+                        formulas: bool = Form(True), x_upload_token: str = Header(default="")):
+    """Subida directa al backend con token firmado (sin API key).
+
+    El PDF viene directo del navegador, sin pasar por Vercel (límite 4,5 MB).
+    El nonce del token solo se consume cuando la subida se acepta, para que
+    un reintento de red con el mismo token no falle si la primera petición
+    no llegó.
+    """
+    try:
+        payload = jobs.validate_upload_token(x_upload_token)
+    except ValueError as exc:
+        raise HTTPException(401, str(exc))
+    _check_rate_limit(request)
+    _check_queue_capacity()
+    if target not in TARGETS:
+        raise HTTPException(400, f"target debe ser uno de: {', '.join(TARGETS)}")
+    if layout not in ("pages", "continuous"):
+        raise HTTPException(400, "layout debe ser 'pages' o 'continuous'")
+    data = await file.read(settings.max_upload_mb * 1024 * 1024 + 1)
+    if len(data) > payload["max_mb"] * 1024 * 1024:
+        raise HTTPException(413, f"El archivo supera el máximo de {payload['max_mb']} MB permitido por el token de subida.")
+    _validate_pdf(data)
+    try:
+        jobs.consume_upload_token(x_upload_token)
+    except ValueError as exc:
+        raise HTTPException(401, str(exc))
+    job_id = _start_job(background, data, file.filename or "documento.pdf", target, layout, formulas)
+    return {"job_id": job_id, "status": "queued"}
+
+
 @app.post("/api/v1/convert", status_code=202, dependencies=[Depends(check_access)])
 async def create_job(background: BackgroundTasks, file: UploadFile = File(...), target: str = Form(...),
                      layout: str = Form("pages"), formulas: bool = Form(True)):
+    _check_queue_capacity()
     if target not in TARGETS:
         raise HTTPException(400, f"target debe ser uno de: {', '.join(TARGETS)}")
     if layout not in ("pages", "continuous"):
@@ -132,6 +226,7 @@ async def create_jobs(background: BackgroundTasks, files: list[UploadFile] = Fil
                       target: str = Form(...), layout: str = Form("pages"),
                       formulas: bool = Form(True)):
     """Subida de varios archivos: crea un trabajo por PDF y devuelve sus ids."""
+    _check_queue_capacity(extra=len(files))
     if target not in TARGETS:
         raise HTTPException(400, f"target debe ser uno de: {', '.join(TARGETS)}")
     if layout not in ("pages", "continuous"):
