@@ -1,8 +1,15 @@
 # Para escalar conversiones: docker compose up -d --scale worker=8
+# OJO: en 2 OCPU no escales a ciegas: ver scripts/loadtest/RESULTADOS.md.
+# Recomendado para Oracle Always Free (2 OCPU / 12 GB): --scale worker=2
+# (2 workers x concurrency 2 = 4 conversiones a la vez; la conversión es
+# CPU y la GIL de Python no deja aprovechar más hilos por worker).
 services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    deploy:
+      resources:
+        limits: {memory: 256m}
 
   api:
     build: .
@@ -11,6 +18,11 @@ services:
     volumes: ["jobs:/data/jobs"]
     depends_on: [redis]
     restart: unless-stopped
+    deploy:
+      # La API no convierte (eso lo hacen los workers): en reposo usa
+      # ~114 MB; 1g deja margen amplio para picos de subida/descarga.
+      resources:
+        limits: {memory: 1g}
 
   worker:
     build: .
@@ -21,7 +33,20 @@ services:
     restart: unless-stopped
     deploy:
       resources:
-        limits: {memory: 2g}
+        # 1g por worker (antes 2g). Medido 26 nov 2026 en modo inline: un
+        # solo proceso con hasta 40 conversiones a la vez llegó a 1,2 GB de
+        # RSS (~30 MB por conversión concurrente de media); con
+        # concurrency=2 el pico realista es 200-400 MB (base + 2
+        # conversiones, incluso Word de 50 págs.), así que 1g deja 2-3x de
+        # margen. Con 2 workers son 2g en total; subir el límite a 2g por
+        # worker solo tiene sentido con --scale worker=1.
+        # max-tasks-per-child=50 se mantiene: en la prueba de carga la RSS
+        # creció de forma monótona y no bajó al drenar la cola, así que
+        # reciclar el proceso cada 50 trabajos acota esa acumulación.
+        # TASK_TIME_LIMIT (600 s por defecto, ver .env.example) sí lo
+        # respeta el worker: app/worker.py lo pasa a Celery como
+        # task_time_limit, así que un trabajo colgado se mata a los 600 s.
+        limits: {memory: 1g}
 
   beat:
     build: .
@@ -30,6 +55,9 @@ services:
     volumes: ["jobs:/data/jobs"]
     depends_on: [redis]
     restart: unless-stopped
+    deploy:
+      resources:
+        limits: {memory: 256m}
 
 volumes:
   jobs:
