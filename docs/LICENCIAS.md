@@ -108,6 +108,58 @@ combinar el componente en un servicio publicado bajo AGPL-3.0.
 |---|---|---|
 | Caddy (HTTPS automático, ver `docs/DESPLIEGUE.md`) | Apache-2.0 | No verificado directamente en esta ronda: Caddy no forma parte del código del servicio, solo del despliegue. Comprobar en <https://github.com/caddyserver/caddy> antes de citarlo como definitivo |
 
+## Navegador — dependencias de `web/` (verificadas el 26 nov 2026)
+
+Método de verificación: versión y licencia leídas del `package.json`
+y del archivo `LICENSE` de cada paquete descargado de npm
+(26 nov 2026), contrastadas con la ficha de npm y el repositorio
+oficial. Los archivos vendidos están en `web/vendor/` con su huella
+SRI en `web/vendor/README.md`. Esto no es asesoría legal.
+
+| Dependencia | Versión | Licencia | Para qué en la web | Fuente oficial | Compatible con AGPL-3.0 |
+|---|---|---|---|---|---|
+| fflate | 0.8.2 | **MIT** | Crear el ZIP al descargar varios resultados | <https://github.com/101arrowz/fflate> · <https://www.npmjs.com/package/fflate> | Sí |
+| exceljs | 4.4.0 | **MIT** | Escribir el `.xlsx` en el navegador | <https://github.com/exceljs/exceljs> · <https://www.npmjs.com/package/exceljs> | Sí |
+| docx | 9.16.0 | **MIT** | Escribir el `.docx` en el navegador | <https://github.com/dolanmiu/docx> · <https://www.npmjs.com/package/docx> | Sí |
+| pptxgenjs | 4.0.1 | **MIT** | Escribir el `.pptx` en el navegador | <https://github.com/gitbrent/PptxGenJS> · <https://www.npmjs.com/package/pptxgenjs> | Sí |
+| pdfjs-dist (pdf.js) | 5.5.207 | **Apache-2.0** | Vista previa del PDF original (renderiza la página en un canvas) | <https://github.com/mozilla/pdf.js> · <https://www.npmjs.com/package/pdfjs-dist> | Sí |
+| tesseract.js (+ tesseract.js-core) | 7.0.0 | **Apache-2.0** | OCR en el navegador para PDFs escaneados (lo usa el motor, `web/engine/`) | <https://github.com/naptha/tesseract.js> · <https://www.npmjs.com/package/tesseract.js> | Sí |
+| MuPDF.js (mupdf) | 1.28.6 | **AGPL-3.0-or-later** | Motor del PDF en el navegador (lo usa `web/engine/`) | <https://github.com/ArtifexSoftware/mupdf.js> · <https://mupdf.com/> | Es copyleft como el servicio: el servicio ya va bajo AGPL-3.0 |
+| Playwright | 1.65.1 | **Apache-2.0** | Solo pruebas (navegador automatizado); no se despliega ni se sirve al visitante | <https://github.com/microsoft/playwright> · <https://www.npmjs.com/package/playwright> | Sí |
+
+**Notas:**
+
+- **MuPDF.js y tesseract.js: versiones confirmadas por el motor.**
+  El motor en construcción (`web/engine/package.json`, 26 nov 2026)
+  fija **MuPDF.js 1.28.6** y **tesseract.js 7.0.0**. Actualizar esta
+  tabla si el motor cambia esas versiones. La licencia no depende de
+  la versión menor: MuPDF.js es AGPL-3.0-or-later y tesseract.js
+  Apache-2.0 en todas sus versiones recientes.
+- **fflate: dos copias, dos versiones.** El motor usa fflate 0.8.3
+  (su `package.json`) y la web vende fflate 0.8.2 en `web/vendor/`.
+  Son copias separadas para usos separados (el motor y el ZIP de la
+  web) y no entran en conflicto; en la próxima actualización conviene
+  alinearlas en la misma versión.
+- **MuPDF.js es AGPL-3.0-or-later, igual que PyMuPDF en el servidor.**
+  Eso no cambia nada para este proyecto: el servicio completo ya se
+  publica bajo AGPL-3.0, y la web muestra el enlace «Código fuente».
+  Lo que sí obliga es lo mismo de siempre: el repositorio debe ser
+  público antes de lanzar y contener el código tal como se sirve
+  (incluido `web/engine/`).
+- **tesseract.js 7.0.0 y los datos de idioma** (`spa.traineddata`,
+  `eng.traineddata`): el motor y sus datos son Apache-2.0. Los datos
+  de idioma se descargan solo si hace falta (carga diferida) y se
+  sirven desde el propio sitio.
+- **Playwright no forma parte de la web:** es solo la herramienta
+  para probar la página en un navegador real. No se sirve al
+  visitante ni se incluye en `web/vendor/`. (En esta ronda no se
+  instaló ni se usó: no había navegador en la máquina de trabajo;
+  ver `docs/METRICAS.md`.)
+- **jsDelivr no es una dependencia con licencia propia que auditar
+  como código:** es la red que sirve estos mismos archivos si el
+  dueño cambia `vendorBase` a `"jsdelivr"` en `web/config.js`. Sus
+  términos se verificaron aparte (ver `docs/DESPLIEGUE_GRATIS.md`).
+
 ## Corrección importante: pdf2docx YA NO es GPL
 
 La versión anterior de este documento decía que pdf2docx era **GPL-3.0**.
