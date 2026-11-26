@@ -188,6 +188,17 @@ def _grid_to_docx(src: str, dst: str, models: list[PageModel], on_progress=None,
         table = out.add_table(rows=len(bounds) - 1, cols=len(cols))
         table.autofit = False
         _fixed_table(table)
+        # Índice propio de celdas (plano + "dueño" de cada posición de la
+        # cuadrícula). python-docx reconstruye la lista completa de celdas
+        # en CADA llamada a table.cell() (propiedad _cells sin caché: recorre
+        # todos los <w:tc> y consulta grid_span/vMerge de cada uno), así que
+        # con 68 filas x 12 columnas el bucle de textos era O(n²) y se
+        # comía ~7 s de los ~8 s de esta ruta en el documento de referencia
+        # (medido con cProfile: 321 llamadas a table.cell() -> 5,7 M de
+        # llamadas internas). Aquí se construye una sola vez y cada fusión
+        # actualiza el mapa de dueños en O(tamaño del rango), con la misma
+        # semántica que table.cell() (una posición dentro de un rango
+        # fusionado resuelve a su celda origen).
         # Anchos reales de columna en la cuadrícula (tblGrid): sin esto
         # python-docx deja las columnas iguales y el texto se desplaza de su
         # posición del PDF (p. ej. el texto de firmas cae sobre los QR).
@@ -195,17 +206,27 @@ def _grid_to_docx(src: str, dst: str, models: list[PageModel], on_progress=None,
         # es la que manda en Word y en LibreOffice.
         for j, col in enumerate(cols):
             table.columns[j].width = Pt(col.right - col.left)
-        for i, row in enumerate(table.rows):
+        n_rows, n_cols = len(bounds) - 1, len(cols)
+        flat = list(table._cells)  # sin fusiones aún: una _Cell por posición
+        owner = [[(r, c) for c in range(n_cols)] for r in range(n_rows)]
+
+        def cell_at(r: int, c: int):
+            o_r, o_c = owner[r][c]
+            return flat[o_r * n_cols + o_c]
+
+        rows = list(table.rows)
+        for i, row in enumerate(rows):
             row.height = Pt(max(1.0, bounds[i + 1] - bounds[i]))
             row.height_rule = WD_ROW_HEIGHT_RULE.EXACTLY
-            for j, cell in enumerate(row.cells):
-                cell.width = Pt(cols[j].right - cols[j].left)
-                _valign_center(cell)
-                if (i, j) in lay.fills:
-                    _shade(cell, lay.fills[(i, j)])
-                _set_cell_borders(cell, lay.borders.get((i, j), {}))
-                para = cell.paragraphs[0]
-                para.paragraph_format.space_before = para.paragraph_format.space_after = Pt(0)
+        for idx, cell in enumerate(flat):
+            i, j = divmod(idx, n_cols)
+            cell.width = Pt(cols[j].right - cols[j].left)
+            _valign_center(cell)
+            if (i, j) in lay.fills:
+                _shade(cell, lay.fills[(i, j)])
+            _set_cell_borders(cell, lay.borders.get((i, j), {}))
+            para = cell.paragraphs[0]
+            para.paragraph_format.space_before = para.paragraph_format.space_after = Pt(0)
 
         # (las fusiones verticales se aplican tras escribir el texto: si se hacen
         # antes, las fusiones horizontales posteriores crean rangos no rectangulares)
@@ -251,9 +272,11 @@ def _grid_to_docx(src: str, dst: str, models: list[PageModel], on_progress=None,
                 # rango vertical posterior dejaría de ser rectangular.
                 j0 = j1 = pl.col
             taken.update((pl.row, c) for c in range(j0, j1 + 1))
-            cell = table.cell(pl.row, j0)
+            cell = cell_at(pl.row, j0)
             if j1 > j0:
-                cell = cell.merge(table.cell(pl.row, j1))
+                cell = cell.merge(flat[pl.row * n_cols + j1])
+                for c in range(j0 + 1, j1 + 1):
+                    owner[pl.row][c] = (pl.row, j0)
                 sides = dict(lay.borders.get((pl.row, j0), {}))
                 right = lay.borders.get((pl.row, j1), {}).get("right")
                 if right:
@@ -275,7 +298,9 @@ def _grid_to_docx(src: str, dst: str, models: list[PageModel], on_progress=None,
         # Fusiones verticales (categorías que agrupan varias filas), tras el texto.
         for top, j, bottom in vmerges:
             try:
-                table.cell(top, j).merge(table.cell(bottom, j))
+                cell_at(top, j).merge(cell_at(bottom, j))
+                for r in range(top + 1, bottom + 1):
+                    owner[r][j] = (top, j)
             except Exception:
                 pass
 
@@ -375,11 +400,14 @@ def pdf_to_word(src: str, dst: str, ocr: bool = True, ocr_lang: str = "spa+eng",
         shutil.copyfile(tmp, dst)
         if on_progress is not None:
             on_progress(pages, pages)
-        return {"pages": pages, "engine": "flow"}
+        # La verificación ya está hecha sobre este mismo contenido: convert()
+        # la reutiliza en vez de verificar de nuevo (ver app/converters/__init__.py).
+        return {"pages": pages, "engine": "flow", "quality": flow_quality}
     grid_info = _grid_to_docx(src, dst, models, on_progress, is_cancelled)
     grid_quality = verify(src, dst, "word")
     if flow_quality.get("text_coverage", 0) > grid_quality.get("text_coverage", 0):
         shutil.copyfile(tmp, dst)
-        return {"pages": pages, "engine": "flow"}
+        return {"pages": pages, "engine": "flow", "quality": flow_quality}
     grid_info["engine"] = "grid (respaldo por cobertura)"
+    grid_info["quality"] = grid_quality
     return grid_info
