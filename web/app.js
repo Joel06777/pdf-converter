@@ -488,7 +488,24 @@
       table.rows.slice(0, 30).forEach(function (row) {
         var tr = el("tr");
         row.forEach(function (cell) {
+          /* La vista previa debe parecerse al PDF original: el modelo trae
+             el color de fondo (cell.fill, hex de 6 dígitos) y la negrita/
+             cursiva, pero antes solo se pintaba la clase "bold" (sin regla
+             CSS) y nunca el fondo. Sin esto, el resultado se veía como una
+             tabla plana aunque el Excel sí llevara los colores. La celda
+             dudosa (OCR) conserva su amarillo de aviso y no se pisa con
+             el color original. Si el fondo es oscuro, el texto pasa a
+             blanco para que se siga leyendo. */
           var td = el("td", (cell.doubtful ? "doubtful " : "") + (cell.bold ? "bold" : ""), cellValue(cell));
+          if (cell.bold) td.style.fontWeight = "bold";
+          if (cell.italic) td.style.fontStyle = "italic";
+          if (cell.fill && !cell.doubtful) {
+            td.style.backgroundColor = "#" + cell.fill;
+            var r = parseInt(cell.fill.slice(0, 2), 16) || 0;
+            var g = parseInt(cell.fill.slice(2, 4), 16) || 0;
+            var b = parseInt(cell.fill.slice(4, 6), 16) || 0;
+            if ((0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.45) td.style.color = "#ffffff";
+          }
           tr.appendChild(td);
         });
         tbl.appendChild(tr);

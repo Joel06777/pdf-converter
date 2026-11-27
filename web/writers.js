@@ -80,9 +80,21 @@
     return cell.value == null ? null : String(cell.value);
   }
 
+  /* El modelo neutro trae cell.fill como hex de 6 dígitos (p. ej. "92D050",
+     el color de fondo del PDF). ExcelJS espera ARGB de 8 dígitos
+     (alfa + RGB): sin el alfa, el relleno puede quedar transparente y el
+     Excel sale sin colores aunque el modelo sí los traiga. */
+  function argb(hex) {
+    var h = String(hex || "").replace(/^#/, "").toUpperCase();
+    if (/^[0-9A-F]{6}$/.test(h)) return "FF" + h;
+    if (/^[0-9A-F]{8}$/.test(h)) return h;
+    return null;
+  }
+
   function fillStyle(cell) {
     if (cell.doubtful) return { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF2CC" } };
-    if (cell.fill) return { type: "pattern", pattern: "solid", fgColor: { argb: cell.fill } };
+    var a = cell.fill ? argb(cell.fill) : null;
+    if (a) return { type: "pattern", pattern: "solid", fgColor: { argb: a } };
     return null;
   }
 
@@ -239,3 +251,4 @@
     vendorInfo: VENDOR,
   };
 })();
+

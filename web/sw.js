@@ -8,7 +8,7 @@
    HTTP del navegador (max-age) las guarda para la próxima visita.
    Los datos de idioma del OCR y los archivos del usuario NUNCA se
    guardan en caché: no son parte de la app. */
-var CACHE_NAME = "pdf-converter-v3";
+var CACHE_NAME = "pdf-converter-v4";
 var APP_SHELL = [
   "./",
   "./index.html",
